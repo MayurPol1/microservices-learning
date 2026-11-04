@@ -36,6 +36,9 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ConnectionStrings__CatalogDb: "Server=catalog-db;Port=3306;Database=catalog;User Id=catalog;Password=catalog_pw;AllowPublicKeyRetrieval=True"
+      # Resilience demo: set e.g. 0.5 and run `docker compose up -d catalog-api` to make half the reads fail.
+      Chaos__FailureRate: "0"
+      Chaos__ExtraLatencyMs: "0"
     ports:
       - "5101:8080"             # exposed for learning (Swagger); in production only the gateway is public
     depends_on:
@@ -43,5 +46,42 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  # ---------------------------------------------------------------- Orders
+  orders-db:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: root_pw
+      MYSQL_DATABASE: orders
+      MYSQL_USER: orders        # a different user: Orders can't even log in to Catalog's database
+      MYSQL_PASSWORD: orders_pw
+    ports:
+      - "13307:3306"
+    volumes:
+      - orders-db-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+  orders-api:
+    build:
+      context: .
+      dockerfile: src/Services/Orders.Api/Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__OrdersDb: "Server=orders-db;Port=3306;Database=orders;User Id=orders;Password=orders_pw;AllowPublicKeyRetrieval=True"
+      Services__Catalog: "http://catalog-api:8080/"
+    ports:
+      - "5102:8080"
+    depends_on:
+      orders-db:
+        condition: service_healthy
+      catalog-api:
+        condition: service_started
+    restart: unless-stopped
+
 volumes:
   catalog-db-data:
+  orders-db-data:

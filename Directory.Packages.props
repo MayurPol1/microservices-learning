@@ -17,5 +17,8 @@
 
     <!-- API docs -->
     <PackageVersion Include="Swashbuckle.AspNetCore" Version="10.3.1" />
+
+    <!-- Resilience for service-to-service HTTP calls (Polly v8 underneath). -->
+    <PackageVersion Include="Microsoft.Extensions.Http.Resilience" Version="10.11.0" />
   </ItemGroup>
 </Project>
