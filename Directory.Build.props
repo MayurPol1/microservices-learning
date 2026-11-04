@@ -8,5 +8,11 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
+    <!--
+      Don't generate a native launcher (.exe) per project; run as "dotnet X.dll" instead.
+      Windows Smart App Control / WDAC can block freshly built, unsigned .exe files, which
+      breaks `dotnet run` and F5. Containers start the .dll the same way, so nothing else changes.
+    -->
+    <UseAppHost>false</UseAppHost>
   </PropertyGroup>
 </Project>
