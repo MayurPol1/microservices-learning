@@ -9,6 +9,24 @@ name: microshop
 
 services:
 
+  # ---------------------------------------------------------------- API gateway
+  # The only service a client needs to know: http://localhost:5000
+  gateway:
+    build:
+      context: .
+      dockerfile: src/ApiGateway/Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      # Override the localhost addresses in appsettings.json with compose service names.
+      ReverseProxy__Clusters__catalog__Destinations__primary__Address: "http://catalog-api:8080/"
+      ReverseProxy__Clusters__orders__Destinations__primary__Address: "http://orders-api:8080/"
+    ports:
+      - "5000:8080"
+    depends_on:
+      - catalog-api
+      - orders-api
+    restart: unless-stopped
+
   # ---------------------------------------------------------------- Catalog
   catalog-db:
     image: mysql:8.4

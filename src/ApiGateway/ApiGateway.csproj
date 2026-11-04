@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <ItemGroup>
+    <PackageReference Include="Yarp.ReverseProxy" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The gateway knows routes and addresses, never the services' code or databases. -->
+    <ProjectReference Include="..\Shared\BuildingBlocks\BuildingBlocks.csproj" />
+  </ItemGroup>
+
+</Project>

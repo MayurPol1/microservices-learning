@@ -20,5 +20,8 @@
 
     <!-- Resilience for service-to-service HTTP calls (Polly v8 underneath). -->
     <PackageVersion Include="Microsoft.Extensions.Http.Resilience" Version="10.11.0" />
+
+    <!-- API gateway: YARP is Microsoft's reverse proxy library. -->
+    <PackageVersion Include="Yarp.ReverseProxy" Version="2.3.0" />
   </ItemGroup>
 </Project>
