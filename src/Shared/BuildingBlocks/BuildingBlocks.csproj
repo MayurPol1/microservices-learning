@@ -20,4 +20,8 @@
     <PackageReference Include="OpenTelemetry.Instrumentation.EntityFrameworkCore" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="BuildingBlocks.Tests" />
+  </ItemGroup>
+
 </Project>

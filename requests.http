@@ -1,0 +1,79 @@
+### MicroShop: try the API by hand.
+### Open this file in Visual Studio 2022+, Rider, or VS Code with the REST Client extension
+### and click "Send request" above each block. Start the system first: docker compose up --build
+
+@gateway = http://localhost:5000
+@keyboardId = 11111111-1111-1111-1111-111111111111
+@mouseId = 22222222-2222-2222-2222-222222222222
+@monitorId = 33333333-3333-3333-3333-333333333333
+@cableId = 44444444-4444-4444-4444-444444444444
+
+### Gateway root: lists the routes it knows
+GET {{gateway}}/
+
+### All products (gateway -> Catalog -> catalog-db)
+GET {{gateway}}/api/products
+
+### Two products in one call: what Orders does internally before accepting an order
+GET {{gateway}}/api/products?ids={{keyboardId}}&ids={{mouseId}}
+
+### Place an order -> 202 Accepted, status "Pending". Note the X-Trace-Id response header.
+# @name placeOrder
+POST {{gateway}}/api/orders
+Content-Type: application/json
+
+{
+  "customerEmail": "ada@example.com",
+  "items": [
+    { "productId": "{{keyboardId}}", "quantity": 1 },
+    { "productId": "{{mouseId}}", "quantity": 2 }
+  ]
+}
+
+### Run this about a second later: Pending -> Confirmed (eventual consistency)
+GET {{gateway}}/api/orders/{{placeOrder.response.body.$.id}}
+
+### The "emails" Notifications sent for that order
+GET {{gateway}}/api/notifications?orderId={{placeOrder.response.body.$.id}}
+
+### Ask for more monitors than exist -> 202 now, Rejected a moment later
+POST {{gateway}}/api/orders
+Content-Type: application/json
+
+{
+  "customerEmail": "bob@example.com",
+  "items": [ { "productId": "{{monitorId}}", "quantity": 10 } ]
+}
+
+### Unknown product -> 400 ValidationProblem straight away (checked synchronously with Catalog)
+POST {{gateway}}/api/orders
+Content-Type: application/json
+
+{
+  "customerEmail": "ada@example.com",
+  "items": [ { "productId": "99999999-9999-9999-9999-999999999999", "quantity": 1 } ]
+}
+
+### Invalid request -> 400 from model validation (no service call at all)
+POST {{gateway}}/api/orders
+Content-Type: application/json
+
+{ "customerEmail": "not-an-email", "items": [] }
+
+### Restock the monitor, then the order above would succeed
+POST {{gateway}}/api/products/{{monitorId}}/restock
+Content-Type: application/json
+
+{ "quantity": 10 }
+
+### Latest orders
+GET {{gateway}}/api/orders
+
+### Health, straight to each service (these ports are exposed only for learning)
+GET http://localhost:5101/health/ready
+
+###
+GET http://localhost:5102/health/ready
+
+###
+GET http://localhost:5103/health/ready

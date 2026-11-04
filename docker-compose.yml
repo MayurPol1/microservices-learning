@@ -87,9 +87,10 @@ services:
       ASPNETCORE_ENVIRONMENT: Development
       OTEL_EXPORTER_OTLP_ENDPOINT: "http://aspire-dashboard:18889"
       ConnectionStrings__CatalogDb: "Server=catalog-db;Port=3306;Database=catalog;User Id=catalog;Password=catalog_pw;AllowPublicKeyRetrieval=True"
-      # Resilience demo: set e.g. 0.5 and run `docker compose up -d catalog-api` to make half the reads fail.
-      Chaos__FailureRate: "0"
-      Chaos__ExtraLatencyMs: "0"
+      # Resilience demo (README, experiment 3). From PowerShell:
+      #   $env:CATALOG_FAILURE_RATE = "0.5"; docker compose up -d catalog-api
+      Chaos__FailureRate: "${CATALOG_FAILURE_RATE:-0}"
+      Chaos__ExtraLatencyMs: "${CATALOG_EXTRA_LATENCY_MS:-0}"
       RabbitMq__HostName: rabbitmq
     ports:
       - "5101:8080"             # exposed for learning (Swagger); in production only the gateway is public
@@ -151,7 +152,7 @@ services:
       OTEL_EXPORTER_OTLP_ENDPOINT: "http://aspire-dashboard:18889"
       RabbitMq__HostName: rabbitmq
     ports:
-      - "5103:8080"
+      - "5103-5104:8080"        # a range, so `docker compose up -d --scale notifications-api=2` works
     depends_on:
       rabbitmq:
         condition: service_healthy

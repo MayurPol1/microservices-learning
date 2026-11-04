@@ -17,7 +17,7 @@ public class StockEventsHandler(OrdersDbContext db, ILogger<StockEventsHandler> 
 {
     public async Task HandleAsync(StockReserved message, MessageContext context, CancellationToken ct)
     {
-        if (await db.IsAlreadyProcessedAsync(context, ct))
+        if (await IsDuplicateAsync(context, ct))
         {
             return;
         }
@@ -39,7 +39,7 @@ public class StockEventsHandler(OrdersDbContext db, ILogger<StockEventsHandler> 
 
     public async Task HandleAsync(StockReservationFailed message, MessageContext context, CancellationToken ct)
     {
-        if (await db.IsAlreadyProcessedAsync(context, ct))
+        if (await IsDuplicateAsync(context, ct))
         {
             return;
         }
@@ -57,5 +57,18 @@ public class StockEventsHandler(OrdersDbContext db, ILogger<StockEventsHandler> 
 
         db.MarkAsProcessed(context);
         await db.SaveChangesAsync(ct);
+    }
+
+    // Idempotency: a redelivered message must not confirm or reject the order a second time.
+    private async Task<bool> IsDuplicateAsync(MessageContext context, CancellationToken ct)
+    {
+        if (!await db.IsAlreadyProcessedAsync(context, ct))
+        {
+            return false;
+        }
+
+        logger.LogInformation("Message {MessageId} ({RoutingKey}) was already handled; skipping duplicate",
+            context.MessageId, context.RoutingKey);
+        return true;
     }
 }
