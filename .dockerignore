@@ -1,0 +1,11 @@
+# Keep the Docker build context small and avoid copying Windows build output into Linux images.
+**/bin/
+**/obj/
+.git/
+.vs/
+.idea/
+**/*.user
+tests/
+docs/
+scripts/
+*.md

@@ -1,0 +1,12 @@
+<!--
+  Settings applied to every project under this folder.
+  MSBuild picks this file up automatically, so no .csproj has to repeat them.
+-->
+<Project>
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+</Project>

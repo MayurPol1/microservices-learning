@@ -1,0 +1,21 @@
+<!--
+  Central Package Management: every NuGet version lives here, and .csproj files list
+  packages without a Version attribute. In this mono-repo it keeps all services on
+  the same versions. In a real company each service often lives in its own repo and
+  pins its own versions, which is part of what "independently deployable" means.
+-->
+<Project>
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Data access: Oracle's official MySQL provider is the one that supports EF Core 10. -->
+    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.14" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.14" />
+    <PackageVersion Include="MySql.EntityFrameworkCore" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore" Version="10.0.14" />
+
+    <!-- API docs -->
+    <PackageVersion Include="Swashbuckle.AspNetCore" Version="10.3.1" />
+  </ItemGroup>
+</Project>

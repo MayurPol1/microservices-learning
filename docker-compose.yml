@@ -1,0 +1,47 @@
+# One command starts the whole system:  docker compose up --build
+# Each service runs in its own container; containers find each other by service name
+# (for example http://catalog-api:8080) on the private network compose creates.
+#
+# Passwords are inline to keep the learning project simple. Real deployments read them
+# from a secret store (Docker/Kubernetes secrets, Azure Key Vault, ...).
+
+name: microshop
+
+services:
+
+  # ---------------------------------------------------------------- Catalog
+  catalog-db:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: root_pw
+      MYSQL_DATABASE: catalog
+      MYSQL_USER: catalog
+      MYSQL_PASSWORD: catalog_pw
+    ports:
+      - "13306:3306"            # host port 13306 so it doesn't clash with a local MySQL on 3306
+    volumes:
+      - catalog-db-data:/var/lib/mysql
+    healthcheck:
+      # TCP ping only succeeds once MySQL has finished its first-start initialisation.
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+  catalog-api:
+    build:
+      context: .
+      dockerfile: src/Services/Catalog.Api/Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__CatalogDb: "Server=catalog-db;Port=3306;Database=catalog;User Id=catalog;Password=catalog_pw;AllowPublicKeyRetrieval=True"
+    ports:
+      - "5101:8080"             # exposed for learning (Swagger); in production only the gateway is public
+    depends_on:
+      catalog-db:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  catalog-db-data:

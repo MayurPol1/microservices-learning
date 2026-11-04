@@ -1,0 +1,17 @@
+<!--
+  Shared plumbing that every service uses (logging, health checks, later messaging and tracing).
+  Rule of thumb: share *infrastructure*, never *business logic*. If Catalog and Orders shared
+  domain classes, a change for one would force a redeploy of the other.
+-->
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <!-- Lets a class library use ASP.NET Core types (WebApplication, health checks, ...). -->
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
+  </ItemGroup>
+
+</Project>
