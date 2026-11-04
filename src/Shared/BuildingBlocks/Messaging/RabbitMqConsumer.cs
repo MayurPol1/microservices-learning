@@ -70,6 +70,11 @@ internal sealed class RabbitMqConsumer(
 
         var context = new MessageContext(messageId, routingKey);
 
+        // Continue the publisher's trace. Logs, database calls and events published by the
+        // handler are all recorded under this span.
+        using var activity = MessagingTelemetry.StartProcess(
+            routingKey, messageId, registration.QueueName, delivery.BasicProperties.Headers);
+
         for (var attempt = 1; ; attempt++)
         {
             try
@@ -102,6 +107,8 @@ internal sealed class RabbitMqConsumer(
             }
             catch (Exception ex)
             {
+                activity?.SetStatus(System.Diagnostics.ActivityStatusCode.Error, ex.Message);
+
                 // Park it in the dead-letter queue so it doesn't block the messages behind it.
                 // Someone can inspect it in the RabbitMQ UI and re-publish it after a fix.
                 logger.LogError(ex, "Giving up on {RoutingKey} message {MessageId} after {Max} attempts; dead-lettering it",

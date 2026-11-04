@@ -20,12 +20,19 @@ public sealed class OutboxMessage
     public DateTime OccurredOnUtc { get; private set; }
     public DateTime? ProcessedOnUtc { get; private set; }
 
+    /// <summary>
+    /// W3C trace context of the request or message that created this event, so the trace
+    /// continues when the event is published later from the background loop.
+    /// </summary>
+    public string? TraceParent { get; private set; }
+
     public static OutboxMessage Create(string routingKey, string payload) => new()
     {
         Id = Guid.NewGuid(),
         RoutingKey = routingKey,
         Payload = payload,
         OccurredOnUtc = DateTime.UtcNow,
+        TraceParent = MessagingTelemetry.CurrentTraceParent(),
     };
 
     public void MarkProcessed() => ProcessedOnUtc = DateTime.UtcNow;

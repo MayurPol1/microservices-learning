@@ -17,6 +17,7 @@ services:
       dockerfile: src/ApiGateway/Dockerfile
     environment:
       ASPNETCORE_ENVIRONMENT: Development
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://aspire-dashboard:18889"
       # Override the localhost addresses in appsettings.json with compose service names.
       ReverseProxy__Clusters__catalog__Destinations__primary__Address: "http://catalog-api:8080/"
       ReverseProxy__Clusters__orders__Destinations__primary__Address: "http://orders-api:8080/"
@@ -28,6 +29,18 @@ services:
       - orders-api
       - notifications-api
     restart: unless-stopped
+
+  # ---------------------------------------------------------------- Observability
+  # Receives traces, metrics and logs (OTLP) from every service and shows them in one UI.
+  aspire-dashboard:
+    image: mcr.microsoft.com/dotnet/aspire-dashboard:13.6
+    environment:
+      # Learning setup: no login for the UI, no API key for incoming telemetry.
+      Dashboard__Frontend__AuthMode: Unsecured
+      Dashboard__Otlp__AuthMode: Unsecured
+    ports:
+      - "18888:18888"           # dashboard UI: http://localhost:18888
+      - "4317:18889"            # OTLP/gRPC, for services you run from Visual Studio (see launchSettings.json)
 
   # ---------------------------------------------------------------- Message broker
   rabbitmq:
@@ -72,6 +85,7 @@ services:
       dockerfile: src/Services/Catalog.Api/Dockerfile
     environment:
       ASPNETCORE_ENVIRONMENT: Development
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://aspire-dashboard:18889"
       ConnectionStrings__CatalogDb: "Server=catalog-db;Port=3306;Database=catalog;User Id=catalog;Password=catalog_pw;AllowPublicKeyRetrieval=True"
       # Resilience demo: set e.g. 0.5 and run `docker compose up -d catalog-api` to make half the reads fail.
       Chaos__FailureRate: "0"
@@ -111,6 +125,7 @@ services:
       dockerfile: src/Services/Orders.Api/Dockerfile
     environment:
       ASPNETCORE_ENVIRONMENT: Development
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://aspire-dashboard:18889"
       ConnectionStrings__OrdersDb: "Server=orders-db;Port=3306;Database=orders;User Id=orders;Password=orders_pw;AllowPublicKeyRetrieval=True"
       Services__Catalog: "http://catalog-api:8080/"
       RabbitMq__HostName: rabbitmq
@@ -133,6 +148,7 @@ services:
       dockerfile: src/Services/Notifications.Api/Dockerfile
     environment:
       ASPNETCORE_ENVIRONMENT: Development
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://aspire-dashboard:18889"
       RabbitMq__HostName: rabbitmq
     ports:
       - "5103:8080"

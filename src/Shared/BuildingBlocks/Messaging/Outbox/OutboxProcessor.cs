@@ -88,6 +88,12 @@ internal sealed class OutboxProcessor<TDbContext>(
 
         foreach (var message in pending)
         {
+            // Continue the trace of the request that created the event (see MessagingTelemetry).
+            using var activity = MessagingTelemetry.StartPublish(message.RoutingKey, message.Id, message.TraceParent);
+
+            var headers = new Dictionary<string, object?>();
+            MessagingTelemetry.Inject(activity, message.TraceParent, headers);
+
             var properties = new BasicProperties
             {
                 MessageId = message.Id.ToString(),
@@ -95,6 +101,7 @@ internal sealed class OutboxProcessor<TDbContext>(
                 ContentType = "application/json",
                 // Written to disk by the broker, so it survives a RabbitMQ restart (the queue is durable too).
                 DeliveryMode = DeliveryModes.Persistent,
+                Headers = headers,
             };
 
             await channel.BasicPublishAsync(

@@ -21,6 +21,7 @@ public static class MessagingDbContextExtensions
             outbox.HasKey(m => m.Id);
             outbox.Property(m => m.RoutingKey).HasMaxLength(100).IsRequired();
             outbox.Property(m => m.Payload).IsRequired();
+            outbox.Property(m => m.TraceParent).HasMaxLength(128);
             outbox.HasIndex(m => m.ProcessedOnUtc);
         });
 
