@@ -32,7 +32,7 @@ app.UseRateLimiter();
 app.MapGet("/", () => new
 {
     name = "MicroShop API gateway",
-    routes = new[] { "/api/products", "/api/orders" },
+    routes = new[] { "/api/products", "/api/orders", "/api/notifications" },
 });
 
 app.MapReverseProxy();

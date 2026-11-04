@@ -4,6 +4,7 @@
   </Folder>
   <Folder Name="/src/Services/">
     <Project Path="src/Services/Catalog.Api/Catalog.Api.csproj" />
+    <Project Path="src/Services/Notifications.Api/Notifications.Api.csproj" />
     <Project Path="src/Services/Orders.Api/Orders.Api.csproj" />
   </Folder>
   <Folder Name="/src/Shared/">

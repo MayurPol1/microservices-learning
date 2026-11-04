@@ -96,5 +96,5 @@ internal sealed class RabbitMqHealthCheck(RabbitMqConnection connection) : IHeal
         => Task.FromResult(connection.IsConnected
             ? HealthCheckResult.Healthy("Connected to RabbitMQ")
             : new HealthCheckResult(context.Registration.FailureStatus,
-                "Not connected to RabbitMQ; outgoing events wait in the outbox"));
+                "Not connected to RabbitMQ; reconnecting in the background"));
 }
