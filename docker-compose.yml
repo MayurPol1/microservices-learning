@@ -27,6 +27,23 @@ services:
       - orders-api
     restart: unless-stopped
 
+  # ---------------------------------------------------------------- Message broker
+  rabbitmq:
+    image: rabbitmq:4.3-management
+    hostname: rabbitmq          # RabbitMQ stores data per node name, which comes from the hostname
+    environment:
+      RABBITMQ_DEFAULT_USER: microshop
+      RABBITMQ_DEFAULT_PASS: microshop_pw
+    ports:
+      - "5672:5672"             # AMQP, used by the services
+      - "15672:15672"           # management UI: http://localhost:15672  (microshop / microshop_pw)
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 20s
+
   # ---------------------------------------------------------------- Catalog
   catalog-db:
     image: mysql:8.4
@@ -57,10 +74,13 @@ services:
       # Resilience demo: set e.g. 0.5 and run `docker compose up -d catalog-api` to make half the reads fail.
       Chaos__FailureRate: "0"
       Chaos__ExtraLatencyMs: "0"
+      RabbitMq__HostName: rabbitmq
     ports:
       - "5101:8080"             # exposed for learning (Swagger); in production only the gateway is public
     depends_on:
       catalog-db:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
     restart: unless-stopped
 
@@ -91,10 +111,13 @@ services:
       ASPNETCORE_ENVIRONMENT: Development
       ConnectionStrings__OrdersDb: "Server=orders-db;Port=3306;Database=orders;User Id=orders;Password=orders_pw;AllowPublicKeyRetrieval=True"
       Services__Catalog: "http://catalog-api:8080/"
+      RabbitMq__HostName: rabbitmq
     ports:
       - "5102:8080"
     depends_on:
       orders-db:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
       catalog-api:
         condition: service_started

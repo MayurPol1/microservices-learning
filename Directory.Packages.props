@@ -23,5 +23,8 @@
 
     <!-- API gateway: YARP is Microsoft's reverse proxy library. -->
     <PackageVersion Include="Yarp.ReverseProxy" Version="2.3.0" />
+
+    <!-- Messaging: the official RabbitMQ client, used directly so every exchange, queue and ack is visible. -->
+    <PackageVersion Include="RabbitMQ.Client" Version="7.2.2" />
   </ItemGroup>
 </Project>

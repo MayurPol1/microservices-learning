@@ -9,6 +9,7 @@ WORKDIR /src
 # re-runs only when a .csproj or the package versions change, not on every code edit.
 COPY Directory.Build.props Directory.Packages.props ./
 COPY src/Shared/BuildingBlocks/BuildingBlocks.csproj src/Shared/BuildingBlocks/
+COPY src/Shared/Contracts/Contracts.csproj src/Shared/Contracts/
 COPY src/Services/Catalog.Api/Catalog.Api.csproj src/Services/Catalog.Api/
 RUN dotnet restore src/Services/Catalog.Api/Catalog.Api.csproj
 

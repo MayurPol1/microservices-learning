@@ -41,4 +41,20 @@ public class Product
         AvailableStock += quantity;
         Version++;
     }
+
+    public bool CanReserve(int quantity) => quantity > 0 && AvailableStock >= quantity;
+
+    /// <summary>Takes stock out of the available pool for an order.</summary>
+    public void Reserve(int quantity)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(quantity);
+        if (AvailableStock < quantity)
+        {
+            throw new InvalidOperationException(
+                $"Only {AvailableStock} x {Name} in stock, {quantity} requested.");
+        }
+
+        AvailableStock -= quantity;
+        Version++;
+    }
 }

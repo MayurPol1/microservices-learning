@@ -1,6 +1,9 @@
+using BuildingBlocks.Messaging;
 using BuildingBlocks.Persistence;
 using BuildingBlocks.ServiceDefaults;
 using Catalog.Api.Data;
+using Catalog.Api.Messaging;
+using Contracts;
 using Microsoft.EntityFrameworkCore;
 using MySql.EntityFrameworkCore.Extensions;
 
@@ -17,6 +20,12 @@ builder.Services.AddDbContext<CatalogDbContext>(options =>
 // Readiness depends on the database: if MySQL is down, this service can't serve requests.
 builder.Services.AddHealthChecks()
     .AddDbContextCheck<CatalogDbContext>("catalog-db", tags: [ServiceDefaultsExtensions.ReadyTag]);
+
+// Asynchronous messaging: Catalog's queue is called "catalog". It listens for new orders
+// and publishes its own events through the outbox table.
+builder.AddMessaging(queueName: "catalog")
+    .Subscribe<OrderPlaced, OrderPlacedHandler>(RoutingKeys.OrderPlaced)
+    .AddOutbox<CatalogDbContext>();
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();

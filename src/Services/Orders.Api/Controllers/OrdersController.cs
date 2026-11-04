@@ -1,3 +1,5 @@
+using BuildingBlocks.Messaging.Outbox;
+using Contracts;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Orders.Api.Clients;
@@ -12,8 +14,12 @@ namespace Orders.Api.Controllers;
 [Produces("application/json")]
 public class OrdersController(OrdersDbContext db, CatalogClient catalog, ILogger<OrdersController> logger) : ControllerBase
 {
+    /// <summary>
+    /// Accepts an order. The response is 202 Accepted with status "Pending": the order is
+    /// stored, but stock is reserved asynchronously. Poll GET /api/orders/{id} for the outcome.
+    /// </summary>
     [HttpPost]
-    [ProducesResponseType<OrderDto>(StatusCodes.Status201Created)]
+    [ProducesResponseType<OrderDto>(StatusCodes.Status202Accepted)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
     public async Task<ActionResult<OrderDto>> PlaceOrder(PlaceOrderRequest request, CancellationToken ct)
@@ -47,12 +53,22 @@ public class OrdersController(OrdersDbContext db, CatalogClient catalog, ILogger
         var order = Order.Place(request.CustomerEmail, lines);
 
         db.Orders.Add(order);
+
+        // Transactional outbox: the OrderPlaced event is saved in the SAME transaction as the
+        // order. Either both are committed or neither is. The OutboxProcessor publishes it to
+        // RabbitMQ a moment later. We never call RabbitMQ directly from a request.
+        db.AddToOutbox(RoutingKeys.OrderPlaced, new OrderPlaced(
+            order.Id,
+            order.CustomerEmail,
+            order.Total,
+            order.Lines.Select(l => new OrderPlacedLine(l.ProductId, l.Quantity)).ToList()));
+
         await db.SaveChangesAsync(ct);
 
-        logger.LogInformation("Order {OrderId} placed with {LineCount} line(s), total {Total}",
+        logger.LogInformation("Order {OrderId} placed with {LineCount} line(s), total {Total}; waiting for stock",
             order.Id, order.Lines.Count, order.Total);
 
-        return CreatedAtAction(nameof(GetOrder), new { id = order.Id }, OrderDto.From(order));
+        return AcceptedAtAction(nameof(GetOrder), new { id = order.Id }, OrderDto.From(order));
     }
 
     [HttpGet("{id:guid}")]

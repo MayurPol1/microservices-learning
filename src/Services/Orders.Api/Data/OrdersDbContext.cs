@@ -1,12 +1,15 @@
+using BuildingBlocks.Messaging.Outbox;
 using Microsoft.EntityFrameworkCore;
 using Orders.Api.Domain;
 
 namespace Orders.Api.Data;
 
 /// <summary>Orders' private database. It has no products table: product data belongs to Catalog.</summary>
-public class OrdersDbContext(DbContextOptions<OrdersDbContext> options) : DbContext(options)
+public class OrdersDbContext(DbContextOptions<OrdersDbContext> options) : DbContext(options), IMessagingDbContext
 {
     public DbSet<Order> Orders => Set<Order>();
+    public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
+    public DbSet<ProcessedMessage> ProcessedMessages => Set<ProcessedMessage>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -31,5 +34,7 @@ public class OrdersDbContext(DbContextOptions<OrdersDbContext> options) : DbCont
             line.Property(l => l.UnitPrice).HasPrecision(18, 2);
             line.Ignore(l => l.LineTotal);
         });
+
+        modelBuilder.AddMessagingTables();
     }
 }

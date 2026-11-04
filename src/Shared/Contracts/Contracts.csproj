@@ -1,0 +1,10 @@
+<!--
+  Integration event contracts: the messages services exchange through RabbitMQ.
+  These are the one thing services agree on, so they live in a tiny project with no
+  dependencies. Treat them like a public API: add fields freely, never rename or remove
+  one without a migration plan, because a consumer that has not been redeployed yet
+  may still read the old shape. In a multi-repo setup this would be a versioned NuGet
+  package (or a JSON schema) instead of a project reference.
+-->
+<Project Sdk="Microsoft.NET.Sdk">
+</Project>

@@ -4,6 +4,7 @@ WORKDIR /src
 
 COPY Directory.Build.props Directory.Packages.props ./
 COPY src/Shared/BuildingBlocks/BuildingBlocks.csproj src/Shared/BuildingBlocks/
+COPY src/Shared/Contracts/Contracts.csproj src/Shared/Contracts/
 COPY src/Services/Orders.Api/Orders.Api.csproj src/Services/Orders.Api/
 RUN dotnet restore src/Services/Orders.Api/Orders.Api.csproj
 

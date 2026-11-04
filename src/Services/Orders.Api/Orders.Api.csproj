@@ -10,6 +10,7 @@
   <ItemGroup>
     <!-- Note: no reference to Catalog.Api. Orders talks to Catalog over HTTP only. -->
     <ProjectReference Include="..\..\Shared\BuildingBlocks\BuildingBlocks.csproj" />
+    <ProjectReference Include="..\..\Shared\Contracts\Contracts.csproj" />
   </ItemGroup>
 
 </Project>
