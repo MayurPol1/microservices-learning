@@ -69,6 +69,30 @@ Content-Type: application/json
 ### Latest orders
 GET {{gateway}}/api/orders
 
+### ------------------------------------------------------------------ added for the web app
+
+### Categories, for the shop's filter
+GET {{gateway}}/api/products/categories
+
+### One page of products in a category, optionally searching the name (category match ignores case)
+GET {{gateway}}/api/products/search?category=accessories&q=&page=1&pageSize=12
+
+### Create a product (category is required)
+# @name createProduct
+POST {{gateway}}/api/products
+Content-Type: application/json
+
+{ "name": "Mechanical Numpad", "description": "Hot-swap switches", "price": 29.99, "initialStock": 5, "category": "Peripherals" }
+
+### Edit it: name, description, price, category (stock only changes through restock and orders)
+PUT {{gateway}}/api/products/{{createProduct.response.body.$.id}}
+Content-Type: application/json
+
+{ "name": "Mechanical Numpad v2", "description": "Hot-swap switches, USB-C", "price": 34.99, "category": "Peripherals" }
+
+### Delete it -> 204
+DELETE {{gateway}}/api/products/{{createProduct.response.body.$.id}}
+
 ### Health, straight to each service (these ports are exposed only for learning)
 GET http://localhost:5101/health/ready
 

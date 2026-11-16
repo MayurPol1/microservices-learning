@@ -25,8 +25,8 @@ public class OrderPlacedHandlerTests
             .Options;
         var db = new CatalogDbContext(options);
         db.Products.AddRange(
-            new Product(KeyboardId, "Keyboard", null, 80m, availableStock: 5),
-            new Product(MouseId, "Mouse", null, 25m, availableStock: 1));
+            new Product(KeyboardId, "Keyboard", null, 80m, availableStock: 5, "Peripherals"),
+            new Product(MouseId, "Mouse", null, 25m, availableStock: 1, "Peripherals"));
         db.SaveChanges();
         return db;
     }

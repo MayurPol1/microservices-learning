@@ -19,6 +19,18 @@ builder.Services.AddRateLimiter(options =>
             factory: _ => new FixedWindowRateLimiterOptions { PermitLimit = permitLimit, Window = window }));
 });
 
+// CORS, also at the edge: browsers refuse to let a page from one origin (the Angular app on
+// http://localhost:4200) read responses from another (this gateway on :5000) unless the server
+// says that origin is allowed. Services behind the gateway never see browser traffic, so they
+// need no CORS setup of their own.
+var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
+builder.Services.AddCors(options => options.AddPolicy("web-app", policy => policy
+    .WithOrigins(allowedOrigins)
+    .AllowAnyHeader()
+    .AllowAnyMethod()
+    // Let the browser's JavaScript read these response headers (hidden by default).
+    .WithExposedHeaders(ServiceDefaultsExtensions.TraceIdHeader, "Location")));
+
 // Routes and backend addresses come from the "ReverseProxy" section of appsettings.json.
 // In Docker the addresses are overridden with environment variables (see docker-compose.yml).
 builder.Services.AddReverseProxy()
@@ -27,6 +39,8 @@ builder.Services.AddReverseProxy()
 var app = builder.Build();
 
 app.UseServiceDefaults();
+// Before the rate limiter and the proxy, so browser "preflight" (OPTIONS) requests are answered here.
+app.UseCors("web-app");
 app.UseRateLimiter();
 
 app.MapGet("/", () => new

@@ -7,25 +7,26 @@ namespace Catalog.Api.Domain;
 /// </summary>
 public class Product
 {
+    public const int NameMaxLength = 200;
+    public const int DescriptionMaxLength = 1000;
+    public const int CategoryMaxLength = 100;
+
     private Product() { } // for EF Core
 
-    public Product(Guid id, string name, string? description, decimal price, int availableStock)
+    public Product(Guid id, string name, string? description, decimal price, int availableStock, string category)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(name);
-        ArgumentOutOfRangeException.ThrowIfNegative(price);
         ArgumentOutOfRangeException.ThrowIfNegative(availableStock);
 
         Id = id;
-        Name = name;
-        Description = description;
-        Price = price;
         AvailableStock = availableStock;
+        SetDetails(name, description, price, category);
     }
 
     public Guid Id { get; private set; }
     public string Name { get; private set; } = string.Empty;
     public string? Description { get; private set; }
     public decimal Price { get; private set; }
+    public string Category { get; private set; } = string.Empty;
     public int AvailableStock { get; private set; }
 
     /// <summary>
@@ -34,6 +35,18 @@ public class Product
     /// silently overwriting the first. That matters once several orders compete for stock.
     /// </summary>
     public int Version { get; private set; }
+
+    /// <summary>
+    /// Changes what the product *is* (name, description, price, category).
+    /// Stock is deliberately not editable here: it only changes through <see cref="Restock"/> and
+    /// <see cref="Reserve"/>. An admin typing "10" into a stock field could silently undo
+    /// reservations that orders made a second earlier.
+    /// </summary>
+    public void UpdateDetails(string name, string? description, decimal price, string category)
+    {
+        SetDetails(name, description, price, category);
+        Version++;
+    }
 
     public void Restock(int quantity)
     {
@@ -56,5 +69,17 @@ public class Product
 
         AvailableStock -= quantity;
         Version++;
+    }
+
+    private void SetDetails(string name, string? description, decimal price, string category)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        ArgumentException.ThrowIfNullOrWhiteSpace(category);
+        ArgumentOutOfRangeException.ThrowIfNegative(price);
+
+        Name = name.Trim();
+        Description = string.IsNullOrWhiteSpace(description) ? null : description.Trim();
+        Price = price;
+        Category = category.Trim();
     }
 }

@@ -24,10 +24,12 @@ public class CatalogDbContext(DbContextOptions<CatalogDbContext> options) : DbCo
         {
             product.ToTable("products");
             product.HasKey(p => p.Id);
-            product.Property(p => p.Name).HasMaxLength(200).IsRequired();
-            product.Property(p => p.Description).HasMaxLength(1000);
+            product.Property(p => p.Name).HasMaxLength(Product.NameMaxLength).IsRequired();
+            product.Property(p => p.Description).HasMaxLength(Product.DescriptionMaxLength);
             product.Property(p => p.Price).HasPrecision(18, 2);
+            product.Property(p => p.Category).HasMaxLength(Product.CategoryMaxLength).IsRequired();
             product.Property(p => p.Version).IsConcurrencyToken();
+            product.HasIndex(p => p.Category);
         });
 
         modelBuilder.AddMessagingTables();

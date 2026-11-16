@@ -5,7 +5,7 @@ namespace Catalog.Tests;
 /// <summary>Plain unit tests of the Product domain object: no database, no web host, no broker.</summary>
 public class ProductTests
 {
-    private static Product NewProduct(int stock) => new(Guid.NewGuid(), "Keyboard", null, 50m, stock);
+    private static Product NewProduct(int stock) => new(Guid.NewGuid(), "Keyboard", null, 50m, stock, "Peripherals");
 
     [Fact]
     public void Reserve_takes_stock_and_bumps_the_concurrency_version()
@@ -43,4 +43,25 @@ public class ProductTests
 
         Assert.Equal(5, product.AvailableStock);
     }
+
+    [Fact]
+    public void UpdateDetails_changes_details_but_never_stock()
+    {
+        var product = NewProduct(stock: 7);
+
+        product.UpdateDetails("  Keyboard Pro  ", "  USB-C  ", 89.99m, " Accessories ");
+
+        Assert.Equal("Keyboard Pro", product.Name);
+        Assert.Equal("USB-C", product.Description);
+        Assert.Equal(89.99m, product.Price);
+        Assert.Equal("Accessories", product.Category);
+        Assert.Equal(7, product.AvailableStock);
+        Assert.Equal(1, product.Version);
+    }
+
+    [Theory]
+    [InlineData("", "Peripherals")]
+    [InlineData("Keyboard", " ")]
+    public void A_product_needs_a_name_and_a_category(string name, string category) =>
+        Assert.ThrowsAny<ArgumentException>(() => NewProduct(stock: 1).UpdateDetails(name, null, 1m, category));
 }
