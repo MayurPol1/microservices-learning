@@ -37,4 +37,16 @@ public class OrdersDbContext(DbContextOptions<OrdersDbContext> options) : DbCont
 
         modelBuilder.AddMessagingTables();
     }
+
+    protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
+    {
+        // MySQL DATETIME has no time zone. We always store UTC, but values read back come out as
+        // DateTimeKind.Unspecified and are serialised without the trailing "Z", so a browser would
+        // read them as local time. Mark every DateTime (and DateTime?) read from the database as UTC.
+        configurationBuilder.Properties<DateTime>().HaveConversion<UtcDateTimeConverter>();
+    }
+
+    private sealed class UtcDateTimeConverter() : Microsoft.EntityFrameworkCore.Storage.ValueConversion.ValueConverter<DateTime, DateTime>(
+        toDatabase => toDatabase.Kind == DateTimeKind.Utc ? toDatabase : toDatabase.ToUniversalTime(),
+        fromDatabase => DateTime.SpecifyKind(fromDatabase, DateTimeKind.Utc));
 }
