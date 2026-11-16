@@ -1,0 +1,23 @@
+.detail {
+  max-width: 640px;
+  margin-top: 16px;
+}
+
+.price {
+  font: var(--mat-sys-headline-small);
+}
+
+.small {
+  font: var(--mat-sys-body-small);
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 16px 16px;
+}
+
+.quantity {
+  width: 120px;
+}

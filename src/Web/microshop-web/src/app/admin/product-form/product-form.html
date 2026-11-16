@@ -1,0 +1,75 @@
+<a mat-button routerLink="/admin/products"><mat-icon>arrow_back</mat-icon> All products</a>
+
+<mat-card appearance="outlined" class="form-card">
+  <mat-card-header>
+    <mat-card-title>{{ isEdit() ? 'Edit product' : 'New product' }}</mat-card-title>
+  </mat-card-header>
+
+  @if (loading()) {
+    <mat-progress-bar mode="indeterminate" />
+  }
+
+  <form [formGroup]="form" (ngSubmit)="save()">
+    <mat-card-content class="fields">
+      <mat-form-field appearance="outline">
+        <mat-label>Name</mat-label>
+        <input matInput formControlName="name" required />
+        @if (form.controls.name.hasError('required')) {
+          <mat-error>Name is required.</mat-error>
+        } @else if (form.controls.name.hasError('maxlength')) {
+          <mat-error>At most 200 characters.</mat-error>
+        }
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>Description</mat-label>
+        <textarea matInput formControlName="description" rows="3"></textarea>
+        @if (form.controls.description.hasError('maxlength')) {
+          <mat-error>At most 1000 characters.</mat-error>
+        }
+      </mat-form-field>
+
+      <div class="row">
+        <mat-form-field appearance="outline">
+          <mat-label>Price</mat-label>
+          <input matInput type="number" step="0.01" min="0" formControlName="price" required />
+          @if (form.controls.price.invalid) {
+            <mat-error>Enter a price from 0 to 1,000,000.</mat-error>
+          }
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>Category</mat-label>
+          <input matInput formControlName="category" [matAutocomplete]="categoryList" required />
+          <mat-autocomplete #categoryList="matAutocomplete">
+            @for (category of categorySuggestions(); track category) {
+              <mat-option [value]="category">{{ category }}</mat-option>
+            }
+          </mat-autocomplete>
+          @if (form.controls.category.hasError('required')) {
+            <mat-error>Pick or type a category.</mat-error>
+          }
+        </mat-form-field>
+      </div>
+
+      @if (!isEdit()) {
+        <mat-form-field appearance="outline">
+          <mat-label>Initial stock</mat-label>
+          <input matInput type="number" min="0" step="1" formControlName="initialStock" required />
+          @if (form.controls.initialStock.invalid) {
+            <mat-error>Enter a stock from 0 to 1,000,000.</mat-error>
+          }
+        </mat-form-field>
+      } @else {
+        <p class="muted">Stock isn't edited here. Use "Restock" on the product list, so that a typo can't undo orders' reservations.</p>
+      }
+    </mat-card-content>
+
+    <mat-card-actions align="end">
+      <a mat-button routerLink="/admin/products">Cancel</a>
+      <button mat-flat-button type="submit" [disabled]="saving() || loading()">
+        {{ saving() ? 'Saving…' : 'Save' }}
+      </button>
+    </mat-card-actions>
+  </form>
+</mat-card>

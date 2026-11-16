@@ -1,0 +1,35 @@
+table {
+  width: 100%;
+  background: transparent;
+
+  a {
+    color: inherit;
+  }
+}
+
+.qty {
+  width: 64px;
+  padding: 6px 8px;
+  font: inherit;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+}
+
+.checkout {
+  max-width: 480px;
+  margin: 24px 0 0 auto;
+}
+
+.total {
+  font: var(--mat-sys-title-large);
+}
+
+.email {
+  width: 100%;
+}
+
+.small {
+  font: var(--mat-sys-body-small);
+}

@@ -1,0 +1,117 @@
+<a mat-button routerLink="/orders"><mat-icon>arrow_back</mat-icon> All orders</a>
+
+@if (order(); as o) {
+  <div class="page-header">
+    <h1>Order {{ o.id.slice(0, 8) }}</h1>
+    <span class="status" [class]="'status status-' + o.status">{{ o.status }}</span>
+  </div>
+
+  @switch (o.status) {
+    @case ('Pending') {
+      <mat-card appearance="outlined" class="state">
+        <mat-card-content>
+          <mat-progress-bar mode="indeterminate" />
+          @if (stillPending()) {
+            <p>
+              Still pending after 30 seconds. Is RabbitMQ or Catalog down? The order is safe in
+              Orders' database (and its event in the outbox); it will complete when they are back.
+            </p>
+            <button mat-stroked-button (click)="poll()"><mat-icon>refresh</mat-icon> Check again</button>
+          } @else {
+            <p>
+              Accepted. Waiting for Catalog to reserve the stock: the <code>order.placed</code> event is
+              travelling through RabbitMQ (eventual consistency).
+            </p>
+          }
+        </mat-card-content>
+      </mat-card>
+    }
+    @case ('Confirmed') {
+      <mat-card appearance="outlined" class="state confirmed">
+        <mat-card-content>
+          <mat-icon>check_circle</mat-icon>
+          <span>
+            Confirmed: the stock is reserved.
+            @if (secondsToComplete() !== null) {
+              It took {{ secondsToComplete() | number: '1.1-1' }} s after the order was placed.
+            }
+          </span>
+        </mat-card-content>
+      </mat-card>
+    }
+    @case ('Rejected') {
+      <mat-card appearance="outlined" class="state rejected">
+        <mat-card-content>
+          <mat-icon>error</mat-icon>
+          <span>Rejected: {{ o.rejectionReason }}</span>
+        </mat-card-content>
+      </mat-card>
+    }
+  }
+
+  <dl class="facts">
+    <dt>Customer</dt>
+    <dd>{{ o.customerEmail }}</dd>
+    <dt>Placed</dt>
+    <dd>{{ o.createdAtUtc | date: 'medium' }}</dd>
+    @if (o.completedAtUtc) {
+      <dt>Completed</dt>
+      <dd>{{ o.completedAtUtc | date: 'medium' }}</dd>
+    }
+    <dt>Total</dt>
+    <dd>{{ o.total | currency }}</dd>
+  </dl>
+
+  <h2>Items</h2>
+  <table mat-table [dataSource]="o.lines">
+    <ng-container matColumnDef="product">
+      <th mat-header-cell *matHeaderCellDef>Product</th>
+      <td mat-cell *matCellDef="let line">{{ line.productName }}</td>
+    </ng-container>
+    <ng-container matColumnDef="unitPrice">
+      <th mat-header-cell *matHeaderCellDef>Unit price</th>
+      <td mat-cell *matCellDef="let line">{{ line.unitPrice | currency }}</td>
+    </ng-container>
+    <ng-container matColumnDef="quantity">
+      <th mat-header-cell *matHeaderCellDef>Quantity</th>
+      <td mat-cell *matCellDef="let line">{{ line.quantity }}</td>
+    </ng-container>
+    <ng-container matColumnDef="lineTotal">
+      <th mat-header-cell *matHeaderCellDef>Total</th>
+      <td mat-cell *matCellDef="let line">{{ line.lineTotal | currency }}</td>
+    </ng-container>
+    <tr mat-header-row *matHeaderRowDef="lineColumns"></tr>
+    <tr mat-row *matRowDef="let row; columns: lineColumns"></tr>
+  </table>
+  <p class="muted small">
+    Names and prices are a snapshot taken when the order was placed; later changes in Catalog don't alter them.
+  </p>
+
+  <h2>Emails sent (Notifications service)</h2>
+  @if (notifications().length === 0) {
+    <p class="muted">None yet.</p>
+  } @else {
+    <mat-list>
+      @for (n of notifications(); track n.id) {
+        <mat-list-item>
+          <mat-icon matListItemIcon>mail</mat-icon>
+          <span matListItemTitle>{{ n.subject }}</span>
+          <span matListItemLine>{{ n.to }} · {{ n.sentAtUtc | date: 'mediumTime' }}</span>
+        </mat-list-item>
+      }
+    </mat-list>
+  }
+
+  @if (traceUrl) {
+    <p class="trace">
+      <a mat-stroked-button [href]="traceUrl" target="_blank" rel="noopener">
+        <mat-icon>timeline</mat-icon>
+        Follow this order through every service (Aspire Dashboard)
+      </a>
+    </p>
+  }
+} @else if (notFound()) {
+  <p class="empty">Order not found.</p>
+} @else {
+  <mat-progress-bar mode="indeterminate" />
+}

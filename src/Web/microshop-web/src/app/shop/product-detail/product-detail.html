@@ -1,0 +1,40 @@
+<a mat-button routerLink="/"><mat-icon>arrow_back</mat-icon> All products</a>
+
+@if (product(); as p) {
+  <mat-card appearance="outlined" class="detail">
+    <mat-card-header>
+      <mat-card-title>{{ p.name }}</mat-card-title>
+      <mat-card-subtitle>{{ p.category }}</mat-card-subtitle>
+    </mat-card-header>
+    <mat-card-content>
+      <p>{{ p.description }}</p>
+      <p class="price">{{ p.price | currency }}</p>
+      <p class="muted">
+        @if (p.availableStock === 0) {
+          Out of stock
+        } @else {
+          {{ p.availableStock }} in stock
+        }
+      </p>
+      <p class="muted small">
+        Stock shown here may already be out of date. The real check happens when you place the order:
+        Catalog reserves the stock asynchronously and the order is confirmed or rejected.
+      </p>
+    </mat-card-content>
+    <mat-card-actions class="actions">
+      <mat-form-field appearance="outline" subscriptSizing="dynamic" class="quantity">
+        <mat-label>Quantity</mat-label>
+        <input matInput type="number" min="1" [max]="p.availableStock"
+               [ngModel]="quantity()" (ngModelChange)="quantity.set($event)" />
+      </mat-form-field>
+      <button mat-flat-button [disabled]="p.availableStock === 0 || quantity() < 1" (click)="addToCart(p)">
+        <mat-icon>add_shopping_cart</mat-icon>
+        Add to cart
+      </button>
+    </mat-card-actions>
+  </mat-card>
+} @else if (notFound()) {
+  <p class="empty">This product doesn't exist (any more).</p>
+} @else {
+  <mat-progress-bar mode="indeterminate" />
+}

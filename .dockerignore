@@ -9,3 +9,6 @@ tests/
 docs/
 scripts/
 *.md
+# The Angular app is built with Node, not .NET; keep it (and its 250 MB node_modules) out of the .NET builds.
+src/Web/
+**/node_modules/

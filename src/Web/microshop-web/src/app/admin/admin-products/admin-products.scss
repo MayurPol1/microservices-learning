@@ -1,0 +1,13 @@
+table {
+  width: 100%;
+  background: transparent;
+}
+
+.actions {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.low {
+  color: var(--mat-sys-error);
+}

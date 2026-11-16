@@ -10,9 +10,9 @@ HTTP with resilience, RabbitMQ events, the outbox pattern, health checks and dis
 
 | | |
 |---|---|
-| Services | API Gateway, Catalog, Orders, Notifications |
-| Stack | .NET 10, ASP.NET Core (controllers), EF Core 10 + MySQL 8.4, RabbitMQ 4.3, YARP, OpenTelemetry |
-| Runs with | `docker compose up --build` |
+| Services | API Gateway, Catalog, Orders, Notifications, plus an Angular web shop |
+| Stack | .NET 10, ASP.NET Core (controllers), EF Core 10 + MySQL 8.4, RabbitMQ 4.3, YARP, OpenTelemetry; Angular 22 + Angular Material |
+| Runs with | `docker compose up --build` (backend) + `npm start` in `src/Web/microshop-web` (web app) |
 | Tests | xUnit v3 unit tests + `scripts/smoke-test.ps1` end-to-end |
 
 ## Contents
@@ -34,7 +34,8 @@ HTTP with resilience, RabbitMQ events, the outbox pattern, health checks and dis
 
 ```mermaid
 flowchart LR
-    client([Client<br/>browser, curl, requests.http]) -->|HTTP :5000| gw[API Gateway<br/>YARP]
+    web([Angular web shop<br/>localhost:4200]) -->|"HTTP :5000 (CORS)"| gw[API Gateway<br/>YARP]
+    client([Other clients<br/>curl, requests.http]) -->|HTTP :5000| gw
 
     gw -->|/api/products| cat[Catalog.Api]
     gw -->|/api/orders| ord[Orders.Api]
@@ -57,7 +58,8 @@ flowchart LR
 
 | Service | Owns | Database | Talks to | Port (host) |
 |---|---|---|---|---|
-| **ApiGateway** | Routing, rate limiting | none | every service (HTTP) | 5000 |
+| **microshop-web** (Angular) | The shop and admin UI, the cart (in the browser) | none | the gateway only | 4200 (`npm start`) |
+| **ApiGateway** | Routing, rate limiting, CORS | none | every service (HTTP) | 5000 |
 | **Catalog.Api** | Products, prices, stock | `catalog-db` | RabbitMQ | 5101 |
 | **Orders.Api** | Orders and their lines | `orders-db` | Catalog (HTTP), RabbitMQ | 5102 |
 | **Notifications.Api** | "Emails" sent to customers | none (in memory) | RabbitMQ | 5103 |
@@ -81,6 +83,7 @@ The events, all on one topic exchange:
 - **Docker Desktop** (Windows: it installs WSL 2 for you; reboot when asked) or Podman Desktop.
   Give it at least 4 GB of RAM.
 - **.NET 10 SDK**, only if you want to run tests or start services from Visual Studio.
+- **Node.js** 22.22+, 24.15+ or 26+ (`winget install OpenJS.NodeJS.LTS`), for the Angular web app.
 
 ### Start everything
 
@@ -98,6 +101,21 @@ After that it starts in seconds. Add `-d` to run it in the background.
 | RabbitMQ management UI (`microshop` / `microshop_pw`) | http://localhost:15672 |
 | Swagger UI per service (exposed for learning only) | http://localhost:5101/swagger, :5102/swagger, :5103/swagger |
 | MySQL (`catalog`/`catalog_pw`, `orders`/`orders_pw`) | localhost:13306 (catalog), localhost:13307 (orders) |
+
+### Start the web shop
+
+With the backend running, in a second terminal:
+
+```bash
+cd src/Web/microshop-web
+npm install
+npm start
+```
+
+`npm install` is needed the first time only. Then open **http://localhost:4200**: browse and filter
+products, add them to the cart, check out, and watch the order go from *Pending* to *Confirmed* (or
+*Rejected*) live, with the emails it triggered and a link to its trace. **Admin** has product create,
+edit, restock and delete. Details: [src/Web/microshop-web/README.md](src/Web/microshop-web/README.md).
 
 ### Test it end to end
 
@@ -531,7 +549,9 @@ microservices-learning/
 ├── requests.http                 # manual API calls
 ├── scripts/smoke-test.ps1        # end-to-end test through the gateway
 ├── src/
-│   ├── ApiGateway/               # YARP routes, rate limiting
+│   ├── ApiGateway/               # YARP routes, rate limiting, CORS
+│   ├── Web/
+│   │   └── microshop-web/        # Angular 22 + Angular Material shop and admin (its own README)
 │   ├── Services/
 │   │   ├── Catalog.Api/          # Controllers/ Domain/ Data/ Messaging/ + Dockerfile
 │   │   ├── Orders.Api/           # Controllers/ Domain/ Data/ Clients/ Messaging/ + Dockerfile
@@ -570,6 +590,8 @@ git show <commit>            # the full diff, with the explanation in the commit
 | 5 | Notifications service | fan-out, loose coupling, stateless consumer |
 | 6 | OpenTelemetry + Aspire Dashboard | traces, metrics, logs, trace context through a broker |
 | 7 | Tests, smoke test, this README | verifying a distributed system |
+| 8 | Catalog categories, search, edit/delete; CORS at the gateway | evolving an API without breaking a consumer (Orders), CORS |
+| 9 | Angular web shop + admin | a front end that only knows the gateway; seeing eventual consistency in the UI |
 
 To run an older step: `git checkout <commit>`, then `docker compose down -v` and
 `docker compose up --build`. The `-v` matters: `EnsureCreated` never alters existing tables, so a
@@ -618,6 +640,8 @@ Roughly in order of difficulty. Each one teaches something new.
 | Choice | Why | Alternatives |
 |---|---|---|
 | ASP.NET Core **controllers** | Familiar, so the only new things are the microservice ideas | Minimal APIs (less ceremony; used by Microsoft's eShop sample) |
+| **Angular 22 + Angular Material** for the web app | Standalone components, signals and zoneless change detection are today's Angular defaults; Material gives accessible tables, forms and dialogs | React, Blazor WebAssembly, Bootstrap or plain CSS |
+| **CORS at the gateway** | The browser only ever talks to the gateway, so that's the only place that needs it | A dev-server proxy (`proxy.conf.json`), or serving the web app from the same origin as the API |
 | **YARP** gateway | Microsoft's reverse proxy; config-driven, fast, plain ASP.NET Core middleware | Ocelot, Envoy, NGINX, Azure API Management |
 | **RabbitMQ.Client** directly | Every exchange, queue, ack and header is visible in our code | MassTransit (v9 is commercially licensed), Wolverine, NServiceBus, Azure Service Bus, Kafka |
 | **MySQL** via Oracle's `MySql.EntityFrameworkCore` | Supports EF Core 10 | Pomelo (the popular provider, but on EF Core 9 at the time of writing), PostgreSQL, SQL Server |

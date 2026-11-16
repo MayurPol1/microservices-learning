@@ -1,0 +1,45 @@
+<div class="page-header">
+  <h1>Orders</h1>
+  <span class="spacer"></span>
+  <button mat-stroked-button (click)="load()"><mat-icon>refresh</mat-icon> Refresh</button>
+</div>
+
+@if (orders(); as list) {
+  @if (list.length === 0) {
+    <div class="empty">
+      <p>No orders yet.</p>
+      <a mat-flat-button routerLink="/">Go shopping</a>
+    </div>
+  } @else {
+    <table mat-table [dataSource]="list">
+      <ng-container matColumnDef="placed">
+        <th mat-header-cell *matHeaderCellDef>Placed</th>
+        <td mat-cell *matCellDef="let o">{{ o.createdAtUtc | date: 'short' }}</td>
+      </ng-container>
+      <ng-container matColumnDef="order">
+        <th mat-header-cell *matHeaderCellDef>Order</th>
+        <td mat-cell *matCellDef="let o"><code>{{ o.id.slice(0, 8) }}</code></td>
+      </ng-container>
+      <ng-container matColumnDef="customer">
+        <th mat-header-cell *matHeaderCellDef>Customer</th>
+        <td mat-cell *matCellDef="let o">{{ o.customerEmail }}</td>
+      </ng-container>
+      <ng-container matColumnDef="items">
+        <th mat-header-cell *matHeaderCellDef>Items</th>
+        <td mat-cell *matCellDef="let o">{{ o.lines.length }}</td>
+      </ng-container>
+      <ng-container matColumnDef="total">
+        <th mat-header-cell *matHeaderCellDef>Total</th>
+        <td mat-cell *matCellDef="let o">{{ o.total | currency }}</td>
+      </ng-container>
+      <ng-container matColumnDef="status">
+        <th mat-header-cell *matHeaderCellDef>Status</th>
+        <td mat-cell *matCellDef="let o"><span [class]="'status status-' + o.status">{{ o.status }}</span></td>
+      </ng-container>
+      <tr mat-header-row *matHeaderRowDef="columns"></tr>
+      <tr mat-row *matRowDef="let row; columns: columns" class="clickable" (click)="router.navigate(['/orders', row.id])"></tr>
+    </table>
+  }
+} @else {
+  <mat-progress-bar mode="indeterminate" />
+}

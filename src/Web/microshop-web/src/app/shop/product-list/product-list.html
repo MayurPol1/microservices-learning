@@ -1,0 +1,74 @@
+<div class="page-header">
+  <h1>Products</h1>
+  <span class="spacer"></span>
+  <mat-form-field appearance="outline" subscriptSizing="dynamic" class="search">
+    <mat-label>Search by name</mat-label>
+    <input matInput [ngModel]="searchText()" (ngModelChange)="searchText.set($event)" (keyup.enter)="search()" />
+    @if (searchText()) {
+      <button matSuffix mat-icon-button aria-label="Clear search" (click)="clearSearch()">
+        <mat-icon>close</mat-icon>
+      </button>
+    } @else {
+      <mat-icon matSuffix>search</mat-icon>
+    }
+  </mat-form-field>
+</div>
+
+<mat-chip-listbox aria-label="Category" class="categories">
+  <mat-chip-option [selected]="category() === ''" (click)="selectCategory('')">All</mat-chip-option>
+  @for (name of categories(); track name) {
+    <mat-chip-option [selected]="category() === name" (click)="selectCategory(name)">{{ name }}</mat-chip-option>
+  }
+</mat-chip-listbox>
+
+@if (loading()) {
+  <mat-progress-bar mode="indeterminate" />
+}
+
+@if (result(); as page) {
+  @if (page.items.length === 0) {
+    <p class="empty">No products match.</p>
+  } @else {
+    <div class="grid">
+      @for (product of page.items; track product.id) {
+        <mat-card appearance="outlined" class="product">
+          <mat-card-header>
+            <mat-card-title>
+              <a [routerLink]="['/products', product.id]">{{ product.name }}</a>
+            </mat-card-title>
+            <mat-card-subtitle>{{ product.category }}</mat-card-subtitle>
+          </mat-card-header>
+          <mat-card-content>
+            <p class="description">{{ product.description }}</p>
+            <p class="price">{{ product.price | currency }}</p>
+            <p class="stock" [class.low]="product.availableStock <= 3">
+              @if (product.availableStock === 0) {
+                Out of stock
+              } @else if (product.availableStock <= 3) {
+                Only {{ product.availableStock }} left
+              } @else {
+                {{ product.availableStock }} in stock
+              }
+            </p>
+          </mat-card-content>
+          <mat-card-actions align="end">
+            <a mat-button [routerLink]="['/products', product.id]">Details</a>
+            <button mat-flat-button [disabled]="product.availableStock === 0" (click)="addToCart(product)">
+              <mat-icon>add_shopping_cart</mat-icon>
+              Add to cart
+            </button>
+          </mat-card-actions>
+        </mat-card>
+      }
+    </div>
+
+    <mat-paginator
+      [length]="page.totalCount"
+      [pageIndex]="page.page - 1"
+      [pageSize]="page.pageSize"
+      [pageSizeOptions]="[6, 12, 24]"
+      (page)="changePage($event)"
+      aria-label="Product pages"
+    />
+  }
+}
