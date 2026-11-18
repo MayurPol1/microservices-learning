@@ -6,13 +6,13 @@ broker**.
 
 It's built with what a .NET developer already knows (ASP.NET Core controllers, EF Core, MySQL,
 dependency injection) and adds only the pieces microservices need: an API gateway, service-to-service
-HTTP with resilience, RabbitMQ events, the outbox pattern, JWT authentication with roles, health
-checks and distributed tracing.
+HTTP with resilience, RabbitMQ events, the outbox pattern, JWT authentication with roles, Stripe
+payments, health checks and distributed tracing.
 
 | | |
 |---|---|
-| Services | API Gateway, Identity, Catalog, Orders, Notifications, plus an Angular web shop |
-| Stack | .NET 10, ASP.NET Core (controllers), EF Core 10 + MySQL 8.4, RabbitMQ 4.3, YARP, OpenTelemetry; Angular 22 + Angular Material |
+| Services | API Gateway, Identity, Catalog, Orders, Payments, Notifications, plus an Angular web shop |
+| Stack | .NET 10, ASP.NET Core (controllers), EF Core 10 + MySQL 8.4, RabbitMQ 4.3, YARP, OpenTelemetry, Stripe (test mode); Angular 22 + Angular Material |
 | Runs with | `docker compose up --build` (backend) + `npm start` in `src/Web/microshop-web` (web app) |
 | Tests | xUnit v3 unit tests + `scripts/smoke-test.ps1` end-to-end |
 
@@ -42,15 +42,21 @@ flowchart LR
     gw -->|/api/products| cat[Catalog.Api]
     gw -->|/api/orders| ord[Orders.Api]
     gw -->|/api/notifications| notif[Notifications.Api]
+    gw -->|/api/payments| pay[Payments.Api]
 
     ord -->|"sync HTTP: GET /api/products?ids=…<br/>retry · timeout · circuit breaker"| cat
+    pay -->|"sync HTTP: GET /api/orders/{id}<br/>with the caller's token"| ord
+    pay -->|"HTTPS: Checkout Sessions, refunds"| stripe([Stripe<br/>test mode])
+    stripe -.->|"webhooks, via the stripe-cli container"| gw
 
     id --- iddb[(identity-db<br/>MySQL)]
     cat --- catdb[(catalog-db<br/>MySQL)]
     ord --- orddb[(orders-db<br/>MySQL)]
+    pay --- paydb[(payments-db<br/>MySQL)]
 
     ord <-->|events| mq{{RabbitMQ<br/>exchange: microshop.events}}
     cat <-->|events| mq
+    pay <-->|events| mq
     mq -->|events| notif
 
     gw -. OTLP .-> dash[Aspire Dashboard<br/>traces · logs · metrics]
@@ -58,6 +64,7 @@ flowchart LR
     cat -. OTLP .-> dash
     ord -. OTLP .-> dash
     notif -. OTLP .-> dash
+    pay -. OTLP .-> dash
 ```
 
 | Service | Owns | Database | Talks to | Port (host) |
@@ -67,6 +74,7 @@ flowchart LR
 | **Identity.Api** | Users, password hashes, roles; issues JWTs | `identity-db` | nobody (the others only check its tokens) | 5105 |
 | **Catalog.Api** | Products, prices, stock | `catalog-db` | RabbitMQ | 5101 |
 | **Orders.Api** | Orders and their lines | `orders-db` | Catalog (HTTP), RabbitMQ | 5102 |
+| **Payments.Api** | Payment attempts and Stripe ids (never card numbers) | `payments-db` | Orders (HTTP), Stripe (HTTPS), RabbitMQ | 5106 |
 | **Notifications.Api** | "Emails" sent to customers | none (in memory) | RabbitMQ | 5103 or 5104\* |
 
 \* Notifications publishes the port *range* 5103-5104 so it can be scaled to two instances, and
@@ -83,9 +91,11 @@ The events, all on one topic exchange:
 | `order.placed` | Orders | Catalog, Notifications | A customer placed an order (status Pending) |
 | `stock.reserved` | Catalog | Orders | Stock for every line is set aside |
 | `stock.reservation-failed` | Catalog | Orders | Not enough stock; nothing was reserved |
-| `order.confirmed` | Orders | Notifications | The order succeeded |
+| `order.confirmed` | Orders | Notifications | The stock is reserved; the customer can pay |
 | `order.rejected` | Orders | Notifications | The order failed, with a reason |
-| `order.cancelled` | Orders | Catalog, Notifications | The customer (or an admin) cancelled; Catalog gives back any stock it reserved |
+| `order.cancelled` | Orders | Catalog, Payments, Notifications | The customer (or an admin) cancelled; Catalog gives back any stock it reserved, Payments closes the Stripe page or refunds |
+| `payment.succeeded` | Payments | Orders, Notifications | Stripe took the money; the order becomes Paid |
+| `payment.refunded` | Payments | Notifications | The money for a cancelled order went back to the customer |
 
 ---
 
@@ -104,7 +114,7 @@ The events, all on one topic exchange:
 docker compose up --build
 ```
 
-The first run downloads about 2 GB of images and builds five .NET images, so give it a few minutes.
+The first run downloads about 2 GB of images and builds six .NET images, so give it a few minutes.
 After that it starts in seconds. Add `-d` to run it in the background.
 
 | What | URL |
@@ -112,8 +122,8 @@ After that it starts in seconds. Add `-d` to run it in the background.
 | API Gateway (the only URL a client needs) | http://localhost:5000/api/products |
 | Aspire Dashboard: traces, structured logs, metrics | http://localhost:18888 |
 | RabbitMQ management UI (`microshop` / `microshop_pw`) | http://localhost:15672 |
-| Swagger UI per service (exposed for learning only) | http://localhost:5101/swagger, :5102/swagger, :5103/swagger (or :5104), :5105/swagger |
-| MySQL (`catalog`/`catalog_pw`, `orders`/`orders_pw`, `identity`/`identity_pw`) | localhost:13306 (catalog), 13307 (orders), 13308 (identity) |
+| Swagger UI per service (exposed for learning only) | http://localhost:5101/swagger, :5102/swagger, :5103/swagger (or :5104), :5105/swagger, :5106/swagger |
+| MySQL (`catalog`/`catalog_pw`, `orders`/`orders_pw`, `identity`/`identity_pw`, `payments`/`payments_pw`) | localhost:13306 (catalog), 13307 (orders), 13308 (identity), 13309 (payments) |
 
 ### Start the web shop
 
@@ -127,9 +137,29 @@ npm start
 
 `npm install` is needed the first time only. Then open **http://localhost:4200**: browse and filter
 products, add them to the cart, log in, check out, and watch the order go from *Pending* to
-*Confirmed* (or *Rejected*) live, with the emails it triggered and a link to its trace. Cancel it and
-watch the stock come back. Log in as the admin to get **Admin**: product create, edit (price),
+*Confirmed* (or *Rejected*) live, with the emails it triggered and a link to its trace. Pay for it with
+Stripe (see below) and watch it become *Paid*; cancel it and watch the stock, and the money, come back. Log in as the admin to get **Admin**: product create, edit (price),
 restock and delete. Details: [src/Web/microshop-web/README.md](src/Web/microshop-web/README.md).
+
+### Set up Stripe (test mode)
+
+Payments use real Stripe, in **test mode**: no real money moves, and Stripe gives you test card
+numbers. Without a key everything else still works; the **Pay** button then answers "Payments are not
+set up".
+
+1. Create a free account at https://dashboard.stripe.com (or use yours) and switch to **test mode**
+   (or a Sandbox). Under **Developers → API keys**, copy the **Secret key**: it starts with `sk_test_`.
+2. Copy [`.env.example`](.env.example) to `.env` in the repository root and paste the key after
+   `STRIPE_SECRET_KEY=`. `.env` is in `.gitignore`; never commit it, never put the key in
+   `appsettings.json`. Payments refuses live keys (`sk_live_`) on purpose.
+3. `docker compose up -d --build`. Compose reads `.env` by itself and passes the key to `payments-api`
+   and to the `stripe-cli` container, which forwards Stripe's webhooks to the gateway.
+4. In the web shop, place an order, wait for *Confirmed*, click **Pay**, and on Stripe's page use card
+   `4242 4242 4242 4242`, any future expiry date, any CVC. Stripe sends you back to the order, which
+   turns *Paid*. Other test cards (declined, 3-D Secure, ...) are listed at
+   https://docs.stripe.com/testing.
+
+Your test payments and refunds show up in the Stripe Dashboard (test mode) under **Payments**.
 
 ### Log in: demo accounts and roles
 
@@ -149,7 +179,8 @@ accounts are always *Customer*. These are demo passwords for a local learning pr
 | Fill a cart (it lives in the browser) | yes | yes | yes |
 | Place an order | 401 | yes, as themselves | yes |
 | See orders and their emails | 401 | their own | all |
-| Cancel an order | 401 | their own | any |
+| Pay for an order (Stripe) | 401 | their own | 403 (only the customer who placed it pays) |
+| Cancel an order (a paid one is refunded) | 401 | their own | any |
 | Create, edit (price), restock, delete products | 401 | 403 | yes |
 
 Asking for another customer's order gives **404**, not 403, so the API doesn't reveal that it exists.
@@ -163,7 +194,8 @@ powershell -ExecutionPolicy Bypass -File scripts/smoke-test.ps1
 It logs in as both demo accounts, places one order that gets **Confirmed** and one that gets
 **Rejected**, waits for each to leave *Pending*, lists the notifications, cancels the confirmed order
 and checks that its stock comes back, then checks that anonymous, customer and admin calls get 401,
-403 and 200 where they should. It also prints a link to the confirmed order's trace. For manual
+403 and 200 where they should. With a Stripe key it also opens a Stripe Checkout page for the order
+and checks that cancelling closes it; paying itself needs a browser, so do that in the web app. It also prints a link to the confirmed order's trace. For manual
 testing, open [`requests.http`](requests.http) in Visual Studio, Rider or VS Code (REST Client): run
 the two login requests first, and the rest pick up their tokens.
 
@@ -244,6 +276,10 @@ sequenceDiagram
     G->>O: forward
     O-->>C: {status: "Confirmed"}
 ```
+
+Paying comes after this and adds a third service conversation: Payments asks Orders for the order
+(HTTP, as the customer), asks Stripe for a payment page, and later publishes `payment.succeeded`, which
+Orders turns into *Paid*. Section [4.13](#413-payments-with-stripe) has the whole flow.
 
 ### Where to look at each hop
 
@@ -390,7 +426,8 @@ A business process spread across services as a chain of local transactions plus 
 **saga**. This one is **choreographed**: nobody is in charge, and each service reacts to the
 previous event:
 
-`order.placed` → Catalog reserves stock → `stock.reserved` → Orders confirms → `order.confirmed`
+`order.placed` → Catalog reserves stock → `stock.reserved` → Orders confirms → `order.confirmed` →
+the customer pays on Stripe → `payment.succeeded` → Orders marks it Paid
 
 The alternative is **orchestration**: one component (for example a state machine in Orders) tells
 each service what to do next. Choreography is simpler for short flows; orchestration is easier to
@@ -398,9 +435,11 @@ follow once there are many steps.
 
 When a later step fails, or the customer changes their mind, a saga can't roll back. It
 **compensates** with another action. Here: `POST /api/orders/{id}/cancel` marks the order
-*Cancelled* and publishes `order.cancelled`; Catalog gives back the stock it reserved for that order.
+*Cancelled* and publishes `order.cancelled`; Catalog gives back the stock it reserved for that order,
+and Payments closes the Stripe page or, if the order was already paid, refunds it.
 
-`order.cancelled` → Catalog releases the reservation → Notifications sends "Your order was cancelled"
+`order.cancelled` → Catalog releases the reservation, Payments refunds → Notifications sends "Your order
+was cancelled" (and "Your refund is on its way")
 
 Two details make the compensation safe:
 
@@ -550,6 +589,64 @@ Simplifications to know about: every service shares one symmetric key, so a serv
 JWKS; exercise 1); there are no refresh tokens (exercise 2); and the key sits in `appsettings.json`
 (production reads it from a secret store).
 
+### 4.13 Payments with Stripe
+
+**Payments** is the only service that talks to Stripe. It owns payment attempts (`payments-db`) and
+stores Stripe's ids, never card numbers.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant B as Browser
+    participant P as Payments.Api
+    participant O as Orders.Api
+    participant S as Stripe
+    participant MQ as RabbitMQ
+
+    B->>P: POST /api/payments/checkout {orderId}
+    P->>O: GET /api/orders/{id} (the customer's own token)
+    O-->>P: Confirmed, total, lines
+    P->>S: create Checkout Session (idempotency key)
+    S-->>P: session id + URL
+    P-->>B: checkoutUrl
+    B->>S: Stripe's page: card 4242 4242 4242 4242
+    S-->>B: redirect to /orders/{id}?payment=success&session_id=…
+    S->>P: webhook checkout.session.completed (signed)
+    B->>P: POST /api/payments/sessions/{id}/refresh
+    P->>S: GET session (whichever of the two arrives first records it)
+    P->>MQ: payment.succeeded (outbox)
+    MQ->>O: order becomes Paid
+```
+
+What each piece teaches:
+
+- **Hosted checkout.** Stripe Checkout is Stripe's page, so card data never reaches our services. That
+  keeps the shop out of most of PCI DSS, the card industry's security rules.
+- **The amount comes from the server.** The browser sends only the order id. Payments reads the total
+  and lines from Orders, calling it with the customer's own token (*token relay*), so Orders' ownership
+  rules apply and someone else's order is a 404.
+- **Webhooks are the source of truth.** Stripe calls `POST /api/payments/webhook`, which has no JWT
+  (`[AllowAnonymous]`): the **signature** in the `Stripe-Signature` header is the authentication.
+  Locally, Stripe can't reach `localhost`, so the `stripe-cli` container keeps a connection to Stripe
+  and forwards the events to the gateway, and writes its signing secret where Payments picks it up.
+- **A second path, for when the webhook is late.** When the customer comes back, the shop asks Payments
+  to check the session with Stripe directly. Both paths call the same idempotent code
+  ([PaymentWorkflow.cs](src/Services/Payments.Api/Application/PaymentWorkflow.cs)), so recording a
+  payment twice changes nothing.
+- **Idempotency keys.** Creating a session and refunding send a key derived from our payment id. A
+  retried call (a timeout, a redelivered message) gets Stripe's first answer instead of a second
+  session or a second refund.
+- **Refund = compensating action.** Payments listens to `order.cancelled`: an unpaid order's Stripe
+  page is closed (expired), a paid one is refunded. Payments also remembers cancelled orders, so a
+  payment that completes at the same moment as the cancel is refunded straight away.
+- **Money in cents.** Stripe counts in the smallest unit: $99.49 is `9949`.
+- **Guard rails.** Payments only accepts test keys and the key only lives in `.env`, which git ignores.
+
+*In this repo:* [Payments.Api](src/Services/Payments.Api) (the Stripe calls are in
+[StripePaymentGateway.cs](src/Services/Payments.Api/PaymentGateway/StripePaymentGateway.cs), behind an
+interface the tests replace with a fake), `PaymentEventsHandler` in Orders, and the `stripe-cli` service
+in [docker-compose.yml](docker-compose.yml).
+
 ---
 
 ## 5. Experiments: break it on purpose
@@ -629,7 +726,8 @@ nothing changes.
 
 ```
 microservices-learning/
-├── docker-compose.yml            # the whole system: 5 services, 3 MySQL, RabbitMQ, dashboard
+├── docker-compose.yml            # the whole system: 6 services, 4 MySQL, RabbitMQ, dashboard, stripe-cli
+├── .env.example                  # copy to .env and add your Stripe test key (.env is git-ignored)
 ├── Directory.Build.props         # net10.0, nullable, implicit usings for every project
 ├── Directory.Packages.props      # every NuGet version, in one place
 ├── requests.http                 # manual API calls
@@ -642,6 +740,7 @@ microservices-learning/
 │   │   ├── Identity.Api/         # Controllers/ Domain/ Data/ Security/ (TokenService) + Dockerfile
 │   │   ├── Catalog.Api/          # Controllers/ Domain/ Data/ Messaging/ + Dockerfile
 │   │   ├── Orders.Api/           # Controllers/ Domain/ Data/ Clients/ Messaging/ + Dockerfile
+│   │   ├── Payments.Api/         # Controllers/ Domain/ Data/ Application/ PaymentGateway/ (Stripe) Clients/ Messaging/
 │   │   └── Notifications.Api/    # Controllers/ Messaging/ NotificationStore + Dockerfile
 │   └── Shared/
 │       ├── Contracts/            # integration events + routing keys
@@ -653,7 +752,8 @@ microservices-learning/
 │               └── Outbox/       # outbox + inbox tables, publisher loop
 └── tests/
     ├── Catalog.Tests/            # Product rules, OrderPlacedHandler, OrderCancelledHandler (in-memory EF)
-    ├── Orders.Tests/             # Order state machine, including cancel
+    ├── Orders.Tests/             # Order state machine, including cancel and paid
+    ├── Payments.Tests/           # Payment rules with a fake Stripe: paid/cancelled races, refunds, duplicates
     └── BuildingBlocks.Tests/     # trace context through message headers
 ```
 
@@ -684,6 +784,8 @@ git show <commit>            # the full diff, with the explanation in the commit
 | 11 | JWT validation and roles in every service | authentication vs authorization, roles, ownership checks, defense in depth |
 | 12 | Cancel an order, release its stock | compensating action, idempotent consumer, events that arrive "too late" |
 | 13 | Log in, roles and cancel in the web app | Bearer interceptor, route guards, showing only what a role may do |
+| 14 | Payments service with Stripe Checkout, webhooks and refunds | external provider integration, webhooks and signatures, idempotency keys, token relay |
+| 15 | Pay with Stripe in the web app | leaving the app for a hosted page and coming back, waiting for an event in the UI |
 
 To run an older step: `git checkout <commit>`, then `docker compose down -v` and
 `docker compose up --build`. The `-v` matters: `EnsureCreated` never alters existing tables, so a
@@ -726,6 +828,11 @@ Roughly in order of difficulty. Each one teaches something new.
 13. **Authorization at the gateway too.** Add YARP authorization policies per route (for example
     product writes need the Admin role), on top of the services' own checks, and compare where each
     check belongs.
+14. **Release unpaid orders.** A Confirmed order keeps its stock reserved until it's paid or
+    cancelled. Cancel orders that stay unpaid for 30 minutes (a background job, or a delayed message),
+    and let the existing compensations do the rest.
+15. **Store webhooks before handling them.** Save each Stripe event (keyed by its id) in an inbox
+    table and answer 200 at once, then process it in the background, like the RabbitMQ consumers do.
 
 ---
 
@@ -741,6 +848,7 @@ Roughly in order of difficulty. Each one teaches something new.
 | **MySQL** via Oracle's `MySql.EntityFrameworkCore` | Supports EF Core 10 | Pomelo (the popular provider, but on EF Core 9 at the time of writing), PostgreSQL, SQL Server |
 | **Aspire Dashboard** | One container shows traces, logs and metrics together | Jaeger, Zipkin, Seq, Prometheus + Grafana, Azure Monitor |
 | **Outbox by hand** | You see exactly how it works | the outbox built into MassTransit, Wolverine or NServiceBus |
+| **Stripe Checkout** (hosted page), test mode | No card data in our services, a few lines of code, real webhooks and refunds | Stripe Payment Element (embedded form), PayPal, Adyen, Razorpay, Braintree |
 | **Our own Identity service issuing JWTs** | Every piece is visible: hashing, claims, signing, validation | Duende IdentityServer, OpenIddict, Keycloak, Microsoft Entra ID, Auth0 |
 
 ---
@@ -756,6 +864,9 @@ Roughly in order of difficulty. Each one teaches something new.
 | Orders stay `Pending` | Is RabbitMQ healthy (`docker compose ps`)? Check `docker compose logs catalog-api orders-api` for handler errors, and look at the `*.dead-letter` queues. |
 | `401 Unauthorized` | No token, or it expired (2 hours). Log in again (`POST /api/auth/login`); the web app sends you to its login page by itself. |
 | `403 Forbidden` | Logged in, but not as an admin. Product changes need `admin@microshop.local`. |
+| **Pay** says "Payments are not set up" (503) | No Stripe test key: see [Set up Stripe](#set-up-stripe-test-mode). After editing `.env`, run `docker compose up -d` so the containers get the new value. |
+| Paid on Stripe, but the order stays *Confirmed* | Look at `docker compose logs payments-api stripe-cli`. The return to the shop should record it even without webhooks; if Payments can't reach Stripe, it shows up there. |
+| `stripe-cli` exited | Expected without a key (it says so in its log). With a key, check the log for an authentication error. |
 | http://localhost:5103 doesn't answer | Notifications may have got 5104 instead; see the note under the services table. |
 | Nothing in the Aspire Dashboard | It only shows data received since it started. Send a request, then refresh. |
 | `An Application Control policy has blocked this file` from `dotnet run`/`dotnet test` | Windows **Smart App Control** is blocking a freshly built, unsigned file (seen on this machine with `Catalog.Tests.dll`). Docker is unaffected, because the containers are Linux. Options: run the tests in Docker or CI, or turn Smart App Control off under *Windows Security → App & browser control* (on some Windows versions it can't be switched back on without a reset, so check first). The repo already sets `UseAppHost=false` to avoid blocked `.exe` launchers. |
