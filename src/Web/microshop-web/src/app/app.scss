@@ -1,16 +1,40 @@
+@use '@angular/material' as mat;
+
 :host {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
 }
 
+// The brand bar: solid violet in light mode, a deep violet in dark mode (a bright bar would glare on a
+// dark page). Material's buttons default to primary-colored text, which would vanish on a primary
+// background, so they get the bar's text color too.
 .toolbar {
+  --app-bar-background: light-dark(var(--mat-sys-primary), var(--mat-sys-primary-container));
+  --app-bar-text: light-dark(var(--mat-sys-on-primary), var(--mat-sys-on-primary-container));
+
   position: sticky;
   top: 0;
   z-index: 10;
   gap: 8px;
-  background: var(--mat-sys-primary-container);
-  color: var(--mat-sys-on-primary-container);
+  box-shadow: var(--mat-sys-level2);
+
+  @include mat.toolbar-overrides(
+    (
+      container-background-color: var(--app-bar-background),
+      container-text-color: var(--app-bar-text),
+    )
+  );
+  @include mat.button-overrides(
+    (
+      text-label-text-color: var(--app-bar-text),
+    )
+  );
+  @include mat.icon-button-overrides(
+    (
+      icon-color: var(--app-bar-text),
+    )
+  );
 }
 
 .brand {
@@ -24,7 +48,16 @@
 }
 
 .nav a.active {
-  background: color-mix(in srgb, var(--mat-sys-primary) 14%, transparent);
+  background: color-mix(in srgb, var(--app-bar-text) 18%, transparent);
+}
+
+// The check mark after the selected theme. A plain span with the icon font, because a <mat-icon>
+// inside a menu item is always placed in the leading icon slot.
+.check {
+  margin-left: 16px;
+  vertical-align: middle;
+  font-size: 20px;
+  color: var(--mat-sys-primary);
 }
 
 .spacer {

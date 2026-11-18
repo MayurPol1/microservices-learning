@@ -16,6 +16,14 @@
       href="https://fonts.googleapis.com/icon?family=Material+Symbols+Outlined"
       rel="stylesheet"
     />
+    <!-- Apply the saved light/dark choice before anything is drawn, so a dark page doesn't flash white.
+         ThemeStore (core/theme-store.ts) keeps it up to date afterwards. -->
+    <script>
+      try {
+        var mode = localStorage.getItem('microshop.theme');
+        if (mode === 'light' || mode === 'dark') document.documentElement.style.colorScheme = mode;
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <app-root></app-root>

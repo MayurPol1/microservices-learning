@@ -16,6 +16,21 @@
 
   <span class="spacer"></span>
 
+  <button mat-icon-button [matMenuTriggerFor]="themeMenu" [attr.aria-label]="'Theme: ' + currentTheme().label">
+    <mat-icon>{{ currentTheme().icon }}</mat-icon>
+  </button>
+  <mat-menu #themeMenu="matMenu">
+    @for (option of themeOptions; track option.mode) {
+      <button mat-menu-item (click)="theme.set(option.mode)" [attr.aria-checked]="theme.mode() === option.mode" role="menuitemradio">
+        <mat-icon>{{ option.icon }}</mat-icon>
+        <span>{{ option.label }}</span>
+        @if (theme.mode() === option.mode) {
+          <span class="check material-symbols-outlined" aria-hidden="true">check</span>
+        }
+      </button>
+    }
+  </mat-menu>
+
   @if (auth.user(); as user) {
     <a mat-icon-button routerLink="/cart" [attr.aria-label]="'Cart, ' + cart.count() + ' items'">
       <mat-icon aria-hidden="false" [matBadge]="cart.count()" [matBadgeHidden]="cart.count() === 0" matBadgeColor="accent">

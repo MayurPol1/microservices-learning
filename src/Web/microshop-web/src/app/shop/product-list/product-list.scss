@@ -48,6 +48,7 @@
   color: var(--mat-sys-on-surface-variant);
 
   &.low {
-    color: var(--mat-sys-error);
+    color: var(--mat-sys-tertiary);
+    font-weight: 500;
   }
 }

@@ -50,6 +50,7 @@ src/
     │   ├── auth-store.ts    AuthStore: login/register/logout; user, token, isAdmin signals + localStorage
     │   ├── auth-interceptor.ts   adds "Authorization: Bearer <token>"; on 401, logs out and goes to /login
     │   ├── auth-guards.ts   authGuard (logged in) and adminGuard (role Admin) for the router
+    │   ├── theme-store.ts   ThemeStore: light, dark or "match my system", remembered in localStorage
     │   └── error-interceptor.ts  every HTTP error → ProblemDetails message in a snack bar
     ├── auth/                login, register
     ├── shop/                product-list, product-detail, cart
@@ -60,6 +61,27 @@ src/
 
 Files follow Angular's 2025 naming style: `product-list.ts` holds the class `ProductList`
 (no `.component` suffix).
+
+## Theme
+
+Angular Material 3 with a **violet** main color and **orange** accents, in light and dark
+([src/styles.scss](src/styles.scss)).
+
+- `mat.theme()` turns the two palettes (`mat.$violet-palette`, `mat.$orange-palette`) into CSS
+  variables such as `--mat-sys-primary` and `--mat-sys-surface`. Material components and our own styles
+  use only those variables, never fixed colors, so every page follows the theme.
+- The variables use CSS `light-dark()`, so light or dark is just the `color-scheme` property on
+  `<html>`. The sun/moon button in the toolbar sets it through `ThemeStore` (Light, Dark, or Match my
+  system), and a few lines in `index.html` apply the saved choice before Angular starts, so a dark page
+  never flashes white.
+- Component overrides: the toolbar is solid violet (deep violet in dark mode) with
+  `mat.toolbar-overrides` / `mat.button-overrides`, and the cart badge is orange with
+  `mat.badge-overrides`. Colors Material has no role for (the green "Confirmed") are defined once as
+  `--app-success` with `light-dark()`.
+
+To try another palette, change `primary` / `tertiary` in `styles.scss` (Material ships red, green,
+blue, yellow, cyan, magenta, orange, chartreuse, spring-green, azure, violet and rose), or generate
+one from your brand color with `ng generate @angular/material:theme-color`.
 
 ## How it connects to the backend
 

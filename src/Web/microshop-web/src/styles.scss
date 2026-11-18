@@ -1,33 +1,43 @@
-// Include theming for Angular Material with `mat.theme()`.
-// This Sass mixin will define CSS variables that are used for styling Angular Material
-// components according to the Material 3 design spec.
-// Learn more about theming and how to use it for your application's
-// custom components at https://material.angular.dev/guide/theming
+// MicroShop's theme: Angular Material 3 with a violet main color and orange accents, in light and dark.
+// `mat.theme()` turns these palettes into CSS variables (--mat-sys-primary, --mat-sys-surface, ...) that
+// every Material component and our own styles use. Learn more: https://material.angular.dev/guide/theming
 @use '@angular/material' as mat;
 
 html {
   height: 100%;
+
+  // Light or dark comes from `color-scheme`: "light dark" follows the operating system, and ThemeStore
+  // (core/theme-store.ts) sets "light" or "dark" when the user picks one in the toolbar. The variables
+  // below use CSS light-dark(), so switching needs no second stylesheet and no page reload.
+  color-scheme: light dark;
+
   @include mat.theme(
     (
       color: (
-        primary: mat.$azure-palette,
-        tertiary: mat.$blue-palette,
+        primary: mat.$violet-palette, // toolbar, buttons, links, selected chips
+        tertiary: mat.$orange-palette, // accents: cart badge, "only 3 left", pending orders
       ),
       typography: Roboto,
       density: 0,
     )
   );
+
+  // The cart badge in orange instead of Material's default red (red reads as "error"). The "fixed"
+  // tones are the same in light and dark, a bright orange that stands out on the violet toolbar.
+  @include mat.badge-overrides(
+    (
+      background-color: var(--mat-sys-tertiary-fixed-dim),
+      text-color: var(--mat-sys-on-tertiary-fixed),
+    )
+  );
+
+  // App colors that Material has no role for, defined once for both schemes.
+  --app-success: light-dark(#2e7d32, #81c784);
 }
 
 body {
-  // Default the application to a light color theme. This can be changed to
-  // `dark` to enable the dark color theme, or to `light dark` to defer to the
-  // user's system settings.
-  color-scheme: light;
-
-  // Set a default background, font and text colors for the application using
-  // Angular Material's system-level CSS variables. Learn more about these
-  // variables at https://material.angular.dev/guide/system-variables
+  // Background, font and text colors from Material's system variables
+  // (https://material.angular.dev/guide/system-variables).
   background-color: var(--mat-sys-surface);
   color: var(--mat-sys-on-surface);
   font: var(--mat-sys-body-medium);
@@ -36,7 +46,6 @@ body {
   margin: 0;
   height: 100%;
 }
-/* You can add global styles to this file, and also import other style files */
 
 // Small helpers shared by the pages.
 .page-header {
@@ -60,8 +69,19 @@ body {
   color: var(--mat-sys-on-surface-variant);
 }
 
+a {
+  color: var(--mat-sys-primary);
+}
+
+code {
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: var(--mat-sys-surface-container-high);
+  font-size: 0.92em;
+}
+
 .status-Pending { --status-color: var(--mat-sys-tertiary); }
-.status-Confirmed { --status-color: #2e7d32; }
+.status-Confirmed { --status-color: var(--app-success); }
 .status-Paid { --status-color: var(--mat-sys-primary); }
 .status-Rejected { --status-color: var(--mat-sys-error); }
 .status-Cancelled { --status-color: var(--mat-sys-outline); }
@@ -73,6 +93,7 @@ body {
   font: var(--mat-sys-label-large);
   color: var(--status-color);
   border: 1px solid var(--status-color);
+  background: color-mix(in srgb, var(--status-color) 10%, transparent);
 }
 
 .empty {

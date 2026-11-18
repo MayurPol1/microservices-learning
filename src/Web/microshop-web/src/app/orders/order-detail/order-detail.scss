@@ -13,10 +13,16 @@
   &.cancelled mat-card-content {
     flex-direction: row;
     align-items: center;
+    gap: 12px;
+  }
+
+  // Keep the icon whole next to long text (flex items shrink by default).
+  mat-icon {
+    flex-shrink: 0;
   }
 
   &.confirmed mat-icon {
-    color: #2e7d32;
+    color: var(--app-success);
   }
 
   &.paid mat-icon {
