@@ -1,9 +1,16 @@
-<a mat-button routerLink="/orders"><mat-icon>arrow_back</mat-icon> All orders</a>
+<a mat-button routerLink="/orders"><mat-icon>arrow_back</mat-icon> Back to orders</a>
 
 @if (order(); as o) {
   <div class="page-header">
     <h1>Order {{ o.id.slice(0, 8) }}</h1>
     <span class="status" [class]="'status status-' + o.status">{{ o.status }}</span>
+    <span class="spacer"></span>
+    @if (canCancel()) {
+      <button mat-stroked-button [disabled]="cancelling()" (click)="cancel()">
+        <mat-icon>cancel</mat-icon>
+        {{ cancelling() ? 'Cancelling…' : 'Cancel order' }}
+      </button>
+    }
   </div>
 
   @switch (o.status) {
@@ -47,6 +54,17 @@
         </mat-card-content>
       </mat-card>
     }
+    @case ('Cancelled') {
+      <mat-card appearance="outlined" class="state cancelled">
+        <mat-card-content>
+          <mat-icon>block</mat-icon>
+          <span>
+            Cancelled {{ o.cancelledAtUtc | date: 'medium' }}. Any stock reserved for it has been given back to
+            Catalog (the order.cancelled event: a compensating action).
+          </span>
+        </mat-card-content>
+      </mat-card>
+    }
   }
 
   <dl class="facts">
@@ -57,6 +75,10 @@
     @if (o.completedAtUtc) {
       <dt>Completed</dt>
       <dd>{{ o.completedAtUtc | date: 'medium' }}</dd>
+    }
+    @if (o.cancelledAtUtc) {
+      <dt>Cancelled</dt>
+      <dd>{{ o.cancelledAtUtc | date: 'medium' }}</dd>
     }
     <dt>Total</dt>
     <dd>{{ o.total | currency }}</dd>

@@ -28,6 +28,11 @@ export class OrdersApi {
   get(id: string): Observable<Order> {
     return this.http.get<Order>(`${this.url}/${id}`);
   }
+
+  /** Cancels the order; Catalog gives the reserved stock back when it hears order.cancelled. */
+  cancel(id: string): Observable<Order> {
+    return this.http.post<Order>(`${this.url}/${id}/cancel`, null);
+  }
 }
 
 /** Calls the Notifications service (through the gateway). */

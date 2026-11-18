@@ -1,0 +1,32 @@
+.auth-card {
+  max-width: 440px;
+  margin: 24px auto;
+}
+
+.fields {
+  display: flex;
+  flex-direction: column;
+  padding-top: 16px;
+
+  mat-form-field {
+    width: 100%;
+  }
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  padding: 0 16px 16px;
+}
+
+.demo {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-bottom: 16px;
+  border-top: 1px solid var(--mat-sys-outline-variant);
+
+  p {
+    margin: 12px 0 4px;
+  }
+}

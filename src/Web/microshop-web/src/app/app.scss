@@ -47,8 +47,25 @@
   color: var(--mat-sys-on-surface-variant);
 }
 
+.user-button {
+  max-width: 260px;
+}
+
+.user-email {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.menu-header {
+  padding: 8px 16px 12px;
+  font: var(--mat-sys-body-medium);
+  border-bottom: 1px solid var(--mat-sys-outline-variant);
+}
+
 @media (max-width: 600px) {
-  .brand span {
+  .brand span,
+  .user-email {
     display: none;
   }
 }

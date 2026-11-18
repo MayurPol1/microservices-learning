@@ -24,10 +24,16 @@ export function describeError(error: HttpErrorResponse): string {
   if (error.status === 0) {
     return `Can't reach the API gateway at ${environment.apiBaseUrl}. Is "docker compose up" running?`;
   }
+  const problem = error.error as ProblemDetails | null;
+  if (error.status === 401) {
+    return problem?.detail ?? 'Please log in to do that.';
+  }
+  if (error.status === 403) {
+    return "You don't have permission to do that (admins only).";
+  }
   if (error.status === 429) {
     return 'Too many requests: the gateway rate limit was hit. Wait a few seconds.';
   }
-  const problem = error.error as ProblemDetails | null;
   if (problem?.errors) {
     // Validation errors (400): { "Name": ["The Name field is required."], ... }
     return Object.values(problem.errors).flat().join(' ');

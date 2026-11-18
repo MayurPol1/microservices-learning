@@ -46,25 +46,28 @@
   <mat-card appearance="outlined" class="checkout">
     <mat-card-content>
       <p class="total">Total: <strong>{{ cart.total() | currency }}</strong></p>
-      <mat-form-field appearance="outline" class="email">
-        <mat-label>Your email</mat-label>
-        <input matInput type="email" [formControl]="email" autocomplete="email" />
-        @if (email.hasError('required')) {
-          <mat-error>Enter your email to place the order.</mat-error>
-        } @else if (email.hasError('email')) {
-          <mat-error>That doesn't look like an email address.</mat-error>
-        }
-      </mat-form-field>
-      <p class="muted small">
-        The order is accepted straight away as "Pending". Catalog then reserves the stock in the
-        background, and the order becomes "Confirmed" or "Rejected" a moment later.
-      </p>
+      @if (auth.user(); as user) {
+        <p>Ordering as <strong>{{ user.email }}</strong>.</p>
+        <p class="muted small">
+          The order is accepted straight away as "Pending". Catalog then reserves the stock in the
+          background, and the order becomes "Confirmed" or "Rejected" a moment later.
+        </p>
+      } @else {
+        <p>Log in to place your order. Your cart is kept.</p>
+      }
     </mat-card-content>
     <mat-card-actions align="end">
-      <button mat-flat-button [disabled]="placing()" (click)="placeOrder()">
-        <mat-icon>shopping_bag</mat-icon>
-        {{ placing() ? 'Placing order…' : 'Place order' }}
-      </button>
+      @if (auth.isLoggedIn()) {
+        <button mat-flat-button [disabled]="placing()" (click)="placeOrder()">
+          <mat-icon>shopping_bag</mat-icon>
+          {{ placing() ? 'Placing order…' : 'Place order' }}
+        </button>
+      } @else {
+        <a mat-flat-button routerLink="/login" [queryParams]="{ returnUrl: '/cart' }">
+          <mat-icon>login</mat-icon>
+          Log in to place your order
+        </a>
+      }
     </mat-card-actions>
   </mat-card>
 }

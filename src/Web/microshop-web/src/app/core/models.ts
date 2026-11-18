@@ -39,7 +39,7 @@ export interface CreateProduct extends SaveProduct {
   initialStock: number;
 }
 
-export type OrderStatus = 'Pending' | 'Confirmed' | 'Rejected';
+export type OrderStatus = 'Pending' | 'Confirmed' | 'Rejected' | 'Cancelled';
 
 export interface OrderLine {
   productId: string;
@@ -57,11 +57,12 @@ export interface Order {
   rejectionReason: string | null;
   createdAtUtc: string;
   completedAtUtc: string | null;
+  cancelledAtUtc: string | null;
   lines: OrderLine[];
 }
 
+/** Only the items: who is ordering comes from the JWT, not from the request body. */
 export interface PlaceOrderRequest {
-  customerEmail: string;
   items: { productId: string; quantity: number }[];
 }
 
@@ -88,4 +89,19 @@ export interface ProblemDetails {
   detail?: string;
   traceId?: string;
   errors?: Record<string, string[]>;
+}
+
+export type Role = 'Admin' | 'Customer';
+
+export interface AuthUser {
+  id: string;
+  email: string;
+  role: Role;
+}
+
+/** What POST /api/auth/login and /register return. */
+export interface AuthResponse {
+  accessToken: string;
+  expiresAtUtc: string;
+  user: AuthUser;
 }

@@ -8,7 +8,8 @@
   }
 
   &.confirmed mat-card-content,
-  &.rejected mat-card-content {
+  &.rejected mat-card-content,
+  &.cancelled mat-card-content {
     flex-direction: row;
     align-items: center;
   }

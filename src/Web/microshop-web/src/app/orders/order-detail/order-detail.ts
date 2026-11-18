@@ -3,15 +3,17 @@ import { Component, DestroyRef, OnInit, computed, inject, input, signal } from '
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
+import { MatDialog } from '@angular/material/dialog';
 import { MatIconModule } from '@angular/material/icon';
 import { MatListModule } from '@angular/material/list';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatTableModule } from '@angular/material/table';
 import { RouterLink } from '@angular/router';
-import { Subscription, switchMap, take, takeWhile, timer } from 'rxjs';
+import { Subscription, filter, switchMap, take, takeWhile, timer } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { CustomerNotification, Order } from '../../core/models';
 import { NotificationsApi, OrdersApi } from '../../core/orders-api';
+import { ConfirmDialog, ConfirmDialogData } from '../../shared/confirm-dialog';
 
 /**
  * Shows one order and watches it change. Right after checkout the order is "Pending"; this page
@@ -33,6 +35,7 @@ export class OrderDetail implements OnInit {
   private readonly ordersApi = inject(OrdersApi);
   private readonly notificationsApi = inject(NotificationsApi);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly dialog = inject(MatDialog);
 
   private static readonly maxPolls = 30;
 
@@ -40,6 +43,13 @@ export class OrderDetail implements OnInit {
   protected readonly notFound = signal(false);
   protected readonly stillPending = signal(false);
   protected readonly notifications = signal<CustomerNotification[]>([]);
+  protected readonly cancelling = signal(false);
+
+  /** Pending and Confirmed orders can be cancelled; Rejected and Cancelled ones can't. */
+  protected readonly canCancel = computed(() => {
+    const status = this.order()?.status;
+    return status === 'Pending' || status === 'Confirmed';
+  });
   protected readonly lineColumns = ['product', 'unitPrice', 'quantity', 'lineTotal'];
 
   /** Link to this order's trace, if we arrived here straight from checkout (see Cart.placeOrder). */
@@ -80,7 +90,7 @@ export class OrderDetail implements OnInit {
         next: (order) => {
           this.order.set(order);
           if (order.status !== 'Pending') {
-            this.loadNotifications();
+            this.loadNotifications(expectedEmails(order));
           }
         },
         error: () => {
@@ -92,16 +102,58 @@ export class OrderDetail implements OnInit {
       });
   }
 
-  // The "confirmed" email is sent by Notifications a moment after the order changes,
-  // so ask a few times until both emails are there.
-  private loadNotifications(): void {
+  /**
+   * Cancels the order (after a confirmation). The backend marks it Cancelled at once; Catalog gives the
+   * stock back and Notifications sends an email a moment later, through the order.cancelled event.
+   */
+  protected cancel(): void {
+    const data: ConfirmDialogData = {
+      title: 'Cancel this order?',
+      message: 'Any stock reserved for it goes back on sale, and you will get an email.',
+      confirmText: 'Cancel order',
+      cancelText: 'Keep order',
+    };
+    this.dialog
+      .open(ConfirmDialog, { data })
+      .afterClosed()
+      .pipe(
+        filter((confirmed) => confirmed === true),
+        switchMap(() => {
+          this.cancelling.set(true);
+          this.polling?.unsubscribe();
+          return this.ordersApi.cancel(this.id());
+        }),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe({
+        next: (order) => {
+          this.order.set(order);
+          this.cancelling.set(false);
+          this.loadNotifications(expectedEmails(order));
+        },
+        error: () => this.cancelling.set(false),
+      });
+  }
+
+  // Emails arrive a moment after the order changes (events through RabbitMQ), so ask a few
+  // times until all the expected ones are there.
+  private loadNotifications(expected: number): void {
     timer(0, 1000)
       .pipe(
-        take(6),
+        take(8),
         switchMap(() => this.notificationsApi.forOrder(this.id())),
-        takeWhile((list) => list.length < 2, true),
+        takeWhile((list) => list.length < expected, true),
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe((list) => this.notifications.set(list));
   }
+}
+
+/** How many emails an order ends up with: received + confirmed/rejected (+ cancelled). */
+function expectedEmails(order: Order): number {
+  if (order.status === 'Cancelled') {
+    // Cancelled after it was confirmed: received, confirmed, cancelled. While pending: received, cancelled.
+    return order.completedAtUtc ? 3 : 2;
+  }
+  return 2;
 }

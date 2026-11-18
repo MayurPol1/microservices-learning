@@ -6,6 +6,8 @@ export interface ConfirmDialogData {
   title: string;
   message: string;
   confirmText: string;
+  /** Label of the button that closes the dialog without doing anything. Defaults to "Cancel". */
+  cancelText?: string;
 }
 
 /** "Are you sure?" dialog. Closes with `true` when confirmed, `undefined` when cancelled. */
@@ -16,7 +18,7 @@ export interface ConfirmDialogData {
     <h2 mat-dialog-title>{{ data.title }}</h2>
     <mat-dialog-content>{{ data.message }}</mat-dialog-content>
     <mat-dialog-actions align="end">
-      <button mat-button mat-dialog-close>Cancel</button>
+      <button mat-button mat-dialog-close>{{ data.cancelText ?? 'Cancel' }}</button>
       <button mat-flat-button [mat-dialog-close]="true">{{ data.confirmText }}</button>
     </mat-dialog-actions>
   `,

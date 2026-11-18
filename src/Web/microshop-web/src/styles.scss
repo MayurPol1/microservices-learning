@@ -63,6 +63,7 @@ body {
 .status-Pending { --status-color: var(--mat-sys-tertiary); }
 .status-Confirmed { --status-color: #2e7d32; }
 .status-Rejected { --status-color: var(--mat-sys-error); }
+.status-Cancelled { --status-color: var(--mat-sys-outline); }
 
 .status {
   display: inline-block;
