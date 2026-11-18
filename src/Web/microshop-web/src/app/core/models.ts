@@ -1,5 +1,5 @@
 // TypeScript shapes of the JSON the backend returns. They mirror the C# DTOs:
-// Catalog's ProductDto/PagedResult, Orders' OrderDto, Notifications' Notification.
+// Catalog's ProductDto/PagedResult, Orders' OrderDto, Notifications' Notification, Payments' PaymentDto.
 // ASP.NET Core serialises property names in camelCase, hence `availableStock` for AvailableStock.
 
 export interface Product {
@@ -39,7 +39,7 @@ export interface CreateProduct extends SaveProduct {
   initialStock: number;
 }
 
-export type OrderStatus = 'Pending' | 'Confirmed' | 'Rejected' | 'Cancelled';
+export type OrderStatus = 'Pending' | 'Confirmed' | 'Rejected' | 'Paid' | 'Cancelled';
 
 export interface OrderLine {
   productId: string;
@@ -51,6 +51,7 @@ export interface OrderLine {
 
 export interface Order {
   id: string;
+  customerId: string;
   customerEmail: string;
   status: OrderStatus;
   total: number;
@@ -58,7 +59,31 @@ export interface Order {
   createdAtUtc: string;
   completedAtUtc: string | null;
   cancelledAtUtc: string | null;
+  paidAtUtc: string | null;
   lines: OrderLine[];
+}
+
+export type PaymentStatus = 'Open' | 'Succeeded' | 'Expired' | 'Failed' | 'Cancelled' | 'Refunded';
+
+/** One attempt to pay for an order, from the Payments service. */
+export interface Payment {
+  id: string;
+  orderId: string;
+  status: PaymentStatus;
+  amount: number;
+  currency: string;
+  createdAtUtc: string;
+  expiresAtUtc: string;
+  paidAtUtc: string | null;
+  refundedAtUtc: string | null;
+  closedAtUtc: string | null;
+}
+
+/** What POST /api/payments/checkout returns: the Stripe page to send the browser to. */
+export interface StartCheckoutResponse {
+  paymentId: string;
+  checkoutUrl: string;
+  expiresAtUtc: string;
 }
 
 /** Only the items: who is ordering comes from the JWT, not from the request body. */

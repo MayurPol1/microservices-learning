@@ -50,7 +50,8 @@
         <p>Ordering as <strong>{{ user.email }}</strong>.</p>
         <p class="muted small">
           The order is accepted straight away as "Pending". Catalog then reserves the stock in the
-          background, and the order becomes "Confirmed" or "Rejected" a moment later.
+          background, and the order becomes "Confirmed" or "Rejected" a moment later. Once it's
+          Confirmed, you pay for it with Stripe.
         </p>
       } @else {
         <p>Log in to place your order. Your cart is kept.</p>

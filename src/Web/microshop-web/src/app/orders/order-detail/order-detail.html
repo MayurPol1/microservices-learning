@@ -5,6 +5,12 @@
     <h1>Order {{ o.id.slice(0, 8) }}</h1>
     <span class="status" [class]="'status status-' + o.status">{{ o.status }}</span>
     <span class="spacer"></span>
+    @if (canPay()) {
+      <button mat-flat-button [disabled]="paying()" (click)="pay()">
+        <mat-icon>credit_card</mat-icon>
+        {{ paying() ? 'Opening Stripe…' : 'Pay ' + (o.total | currency) }}
+      </button>
+    }
     @if (canCancel()) {
       <button mat-stroked-button [disabled]="cancelling()" (click)="cancel()">
         <mat-icon>cancel</mat-icon>
@@ -34,14 +40,49 @@
       </mat-card>
     }
     @case ('Confirmed') {
-      <mat-card appearance="outlined" class="state confirmed">
-        <mat-card-content>
-          <mat-icon>check_circle</mat-icon>
-          <span>
-            Confirmed: the stock is reserved.
-            @if (secondsToComplete() !== null) {
-              It took {{ secondsToComplete() | number: '1.1-1' }} s after the order was placed.
+      @if (awaitingPayment()) {
+        <mat-card appearance="outlined" class="state">
+          <mat-card-content>
+            <mat-progress-bar mode="indeterminate" />
+            @if (stillPending()) {
+              <p>
+                Still waiting for the payment after 30 seconds. Is the Payments service running? Stripe has
+                the payment; it will show up here when Payments and Orders catch up.
+              </p>
+              <button mat-stroked-button (click)="poll()"><mat-icon>refresh</mat-icon> Check again</button>
+            } @else {
+              <p>
+                Back from Stripe. Waiting for the payment to reach this order: Payments checks the session with
+                Stripe and publishes <code>payment.succeeded</code>, which Orders turns into "Paid".
+              </p>
             }
+          </mat-card-content>
+        </mat-card>
+      } @else {
+        <mat-card appearance="outlined" class="state confirmed">
+          <mat-card-content>
+            <mat-icon>check_circle</mat-icon>
+            <span>
+              Confirmed: the stock is reserved.
+              @if (secondsToComplete() !== null) {
+                It took {{ secondsToComplete() | number: '1.1-1' }} s after the order was placed.
+              }
+              @if (canPay()) {
+                Pay to complete it. Stripe is in test mode: use card <code>4242 4242 4242 4242</code>, any future
+                date and any CVC.
+              }
+            </span>
+          </mat-card-content>
+        </mat-card>
+      }
+    }
+    @case ('Paid') {
+      <mat-card appearance="outlined" class="state paid">
+        <mat-card-content>
+          <mat-icon>paid</mat-icon>
+          <span>
+            Paid {{ o.paidAtUtc | date: 'medium' }}. Stripe took the payment; Payments told Orders with a
+            <code>payment.succeeded</code> event.
           </span>
         </mat-card-content>
       </mat-card>
@@ -60,7 +101,7 @@
           <mat-icon>block</mat-icon>
           <span>
             Cancelled {{ o.cancelledAtUtc | date: 'medium' }}. Any stock reserved for it has been given back to
-            Catalog (the order.cancelled event: a compensating action).
+            Catalog, and if it was paid, Payments refunded it (the order.cancelled event: compensating actions).
           </span>
         </mat-card-content>
       </mat-card>
@@ -75,6 +116,10 @@
     @if (o.completedAtUtc) {
       <dt>Completed</dt>
       <dd>{{ o.completedAtUtc | date: 'medium' }}</dd>
+    }
+    @if (o.paidAtUtc) {
+      <dt>Paid</dt>
+      <dd>{{ o.paidAtUtc | date: 'medium' }}</dd>
     }
     @if (o.cancelledAtUtc) {
       <dt>Cancelled</dt>
@@ -108,6 +153,28 @@
   <p class="muted small">
     Names and prices are a snapshot taken when the order was placed; later changes in Catalog don't alter them.
   </p>
+
+  <h2>Payments (Payments service)</h2>
+  @if (payments().length === 0) {
+    <p class="muted">No payment yet.</p>
+  } @else {
+    <mat-list>
+      @for (p of payments(); track p.id) {
+        <mat-list-item>
+          <mat-icon matListItemIcon>{{ p.status === 'Succeeded' ? 'paid' : p.status === 'Refunded' ? 'undo' : 'credit_card' }}</mat-icon>
+          <span matListItemTitle>
+            {{ p.status }} · {{ p.amount | currency: (p.currency | uppercase) }}
+          </span>
+          <span matListItemLine>
+            Started {{ p.createdAtUtc | date: 'mediumTime' }}
+            @if (p.paidAtUtc) { · paid {{ p.paidAtUtc | date: 'mediumTime' }} }
+            @if (p.refundedAtUtc) { · refunded {{ p.refundedAtUtc | date: 'mediumTime' }} }
+            @if (p.status === 'Open') { · payable until {{ p.expiresAtUtc | date: 'shortTime' }} }
+          </span>
+        </mat-list-item>
+      }
+    </mat-list>
+  }
 
   <h2>Emails sent (Notifications service)</h2>
   @if (notifications().length === 0) {

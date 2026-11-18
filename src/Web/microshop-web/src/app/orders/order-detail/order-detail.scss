@@ -8,6 +8,7 @@
   }
 
   &.confirmed mat-card-content,
+  &.paid mat-card-content,
   &.rejected mat-card-content,
   &.cancelled mat-card-content {
     flex-direction: row;
@@ -16,6 +17,10 @@
 
   &.confirmed mat-icon {
     color: #2e7d32;
+  }
+
+  &.paid mat-icon {
+    color: var(--mat-sys-primary);
   }
 
   &.rejected mat-icon {
