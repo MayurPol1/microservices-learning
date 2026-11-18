@@ -10,8 +10,8 @@ import { CartStore } from '../../core/cart-store';
 import { OrdersApi } from '../../core/orders-api';
 
 /**
- * The cart and checkout. Anyone can fill a cart; placing the order needs a login, because the
- * order belongs to the logged-in user (Orders takes the owner from the JWT, not from a form field).
+ * The cart and checkout, for logged-in users only (authGuard in app.routes.ts): the cart belongs to
+ * the user, and so does the order (Orders takes the owner from the JWT, not from a form field).
  * "Place order" sends ONE request to the gateway; everything after that happens in the backend.
  */
 @Component({

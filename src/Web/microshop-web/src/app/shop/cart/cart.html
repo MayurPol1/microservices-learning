@@ -53,22 +53,13 @@
           background, and the order becomes "Confirmed" or "Rejected" a moment later. Once it's
           Confirmed, you pay for it with Stripe.
         </p>
-      } @else {
-        <p>Log in to place your order. Your cart is kept.</p>
       }
     </mat-card-content>
     <mat-card-actions align="end">
-      @if (auth.isLoggedIn()) {
-        <button mat-flat-button [disabled]="placing()" (click)="placeOrder()">
-          <mat-icon>shopping_bag</mat-icon>
-          {{ placing() ? 'Placing order…' : 'Place order' }}
-        </button>
-      } @else {
-        <a mat-flat-button routerLink="/login" [queryParams]="{ returnUrl: '/cart' }">
-          <mat-icon>login</mat-icon>
-          Log in to place your order
-        </a>
-      }
+      <button mat-flat-button [disabled]="placing()" (click)="placeOrder()">
+        <mat-icon>shopping_bag</mat-icon>
+        {{ placing() ? 'Placing order…' : 'Place order' }}
+      </button>
     </mat-card-actions>
   </mat-card>
 }

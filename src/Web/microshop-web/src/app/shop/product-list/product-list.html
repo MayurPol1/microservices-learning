@@ -53,10 +53,17 @@
           </mat-card-content>
           <mat-card-actions align="end">
             <a mat-button [routerLink]="['/products', product.id]">Details</a>
-            <button mat-flat-button [disabled]="product.availableStock === 0" (click)="addToCart(product)">
-              <mat-icon>add_shopping_cart</mat-icon>
-              Add to cart
-            </button>
+            @if (auth.isLoggedIn()) {
+              <button mat-flat-button [disabled]="product.availableStock === 0" (click)="addToCart(product)">
+                <mat-icon>add_shopping_cart</mat-icon>
+                Add to cart
+              </button>
+            } @else {
+              <a mat-stroked-button routerLink="/login" [queryParams]="{ returnUrl: currentUrl }">
+                <mat-icon>login</mat-icon>
+                Log in to buy
+              </a>
+            }
           </mat-card-actions>
         </mat-card>
       }

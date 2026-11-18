@@ -20,9 +20,9 @@ npm start            # = ng serve, then open http://localhost:4200
 
 | URL | Page | Who | Backend calls (through the gateway) |
 |---|---|---|---|
-| `/` | Products: category chips, name search, paging | everyone | `GET /api/products/categories`, `GET /api/products/search` |
-| `/products/:id` | Product details, add a quantity to the cart | everyone | `GET /api/products/{id}` |
-| `/cart` | Cart (kept in the browser) and checkout | everyone; placing the order needs a login | `POST /api/orders` → 202 *Pending* |
+| `/` | Products: category chips, name search, paging; "Add to cart" when logged in, "Log in to buy" otherwise | everyone | `GET /api/products/categories`, `GET /api/products/search` |
+| `/products/:id` | Product details, add a quantity to the cart (logged in) | everyone | `GET /api/products/{id}` |
+| `/cart` | Your cart (kept in the browser, one per user) and checkout | logged in | `POST /api/orders` → 202 *Pending* |
 | `/login`, `/register` | Log in (with buttons for the two demo accounts), create a customer account | everyone | `POST /api/auth/login`, `POST /api/auth/register` |
 | `/orders` | "My orders" for a customer, "All orders" for the admin | logged in | `GET /api/orders` |
 | `/orders/:id` | One order, polled every second until *Confirmed*/*Rejected*; **Pay** with Stripe; cancel it; its payments and emails; link to its trace | logged in | `GET /api/orders/{id}`, `POST /api/payments/checkout`, `POST /api/payments/sessions/{id}/refresh`, `GET /api/payments?orderId=`, `POST /api/orders/{id}/cancel`, `GET /api/notifications?orderId=` |
@@ -46,7 +46,7 @@ src/
     │   ├── catalog-api.ts   CatalogApi: products, categories, search, admin calls
     │   ├── orders-api.ts    OrdersApi (+ X-Trace-Id, cancel), NotificationsApi
     │   ├── payments-api.ts  PaymentsApi: start a Stripe checkout, list payments, refresh after paying
-    │   ├── cart-store.ts    CartStore: signals + localStorage
+    │   ├── cart-store.ts    CartStore: one cart per logged-in user (linkedSignal + localStorage), none when logged out
     │   ├── auth-store.ts    AuthStore: login/register/logout; user, token, isAdmin signals + localStorage
     │   ├── auth-interceptor.ts   adds "Authorization: Bearer <token>"; on 401, logs out and goes to /login
     │   ├── auth-guards.ts   authGuard (logged in) and adminGuard (role Admin) for the router
@@ -97,10 +97,14 @@ Payments list then shows *Refunded* and a refund email arrives.
    keeps you logged in. An expired session is dropped when the app starts.
 3. `auth-interceptor.ts` adds `Authorization: Bearer <token>` to every call to the gateway. If a
    service still answers 401 (the token expired meanwhile), it logs out and opens `/login` with a
-   `returnUrl`, so you land back where you were. That's how the cart's "Log in to place your
-   order" brings you back to the cart, with the cart still full.
-4. The guards in `auth-guards.ts` keep anonymous users out of `/orders` and customers out of
-   `/admin`, and the toolbar only shows the links your role can use.
+   `returnUrl`, so you land back where you were. That's how "Log in to buy" on a product brings you
+   back to that product.
+4. The guards in `auth-guards.ts` keep anonymous users out of `/cart` and `/orders` and customers out
+   of `/admin`, and the toolbar only shows the links your role can use (no cart icon when logged out).
+5. The cart belongs to the user: `CartStore` saves it under `microshop.cart.<user id>` and switches
+   carts whenever someone logs in or out (a `linkedSignal` whose source is the user). Log out and the
+   cart disappears; log back in and it's there again; another person on the same browser gets their
+   own.
 
 The guards and hidden links are **only for a pleasant UI**. Anyone can edit the JavaScript in their
 browser, so the real protection is in the services: every API call is checked against the token

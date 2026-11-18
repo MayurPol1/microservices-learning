@@ -18,6 +18,7 @@ export const routes: Routes = [
   {
     path: 'cart',
     loadComponent: () => import('./shop/cart/cart').then((m) => m.Cart),
+    canActivate: [authGuard],
     title: 'Cart · MicroShop',
   },
   {

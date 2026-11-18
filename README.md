@@ -176,7 +176,7 @@ accounts are always *Customer*. These are demo passwords for a local learning pr
 | Action | Anonymous | Customer | Admin |
 |---|---|---|---|
 | Browse and search products | yes | yes | yes |
-| Fill a cart (it lives in the browser) | yes | yes | yes |
+| Fill a cart (one per user, kept in the browser) | no: "Log in to buy" | yes | yes |
 | Place an order | 401 | yes, as themselves | yes |
 | See orders and their emails | 401 | their own | all |
 | Pay for an order (Stripe) | 401 | their own | 403 (only the customer who placed it pays) |

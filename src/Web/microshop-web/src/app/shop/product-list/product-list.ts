@@ -10,7 +10,8 @@ import { MatInputModule } from '@angular/material/input';
 import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { RouterLink } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
+import { AuthStore } from '../../core/auth-store';
 import { CartStore } from '../../core/cart-store';
 import { CatalogApi } from '../../core/catalog-api';
 import { PagedResult, Product } from '../../core/models';
@@ -32,6 +33,8 @@ export class ProductList implements OnInit {
   private readonly catalog = inject(CatalogApi);
   private readonly cart = inject(CartStore);
   private readonly snackBar = inject(MatSnackBar);
+  private readonly router = inject(Router);
+  protected readonly auth = inject(AuthStore);
 
   protected readonly categories = signal<string[]>([]);
   protected readonly category = signal('');
@@ -69,8 +72,14 @@ export class ProductList implements OnInit {
   }
 
   protected addToCart(product: Product): void {
-    this.cart.add(product);
-    this.snackBar.open(`${product.name} added to the cart`, 'OK', { duration: 2500 });
+    if (this.cart.add(product)) {
+      this.snackBar.open(`${product.name} added to the cart`, 'OK', { duration: 2500 });
+    }
+  }
+
+  /** Where to come back to after logging in: this page, with its filters. */
+  protected get currentUrl(): string {
+    return this.router.url;
   }
 
   private load(): void {

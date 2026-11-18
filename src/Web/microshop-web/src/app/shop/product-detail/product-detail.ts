@@ -9,6 +9,7 @@ import { MatInputModule } from '@angular/material/input';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { Router, RouterLink } from '@angular/router';
+import { AuthStore } from '../../core/auth-store';
 import { CartStore } from '../../core/cart-store';
 import { CatalogApi } from '../../core/catalog-api';
 import { Product } from '../../core/models';
@@ -30,6 +31,7 @@ export class ProductDetail implements OnInit {
   private readonly cart = inject(CartStore);
   private readonly snackBar = inject(MatSnackBar);
   private readonly router = inject(Router);
+  protected readonly auth = inject(AuthStore);
 
   protected readonly product = signal<Product | null>(null);
   protected readonly notFound = signal(false);
@@ -47,7 +49,9 @@ export class ProductDetail implements OnInit {
     if (quantity < 1) {
       return;
     }
-    this.cart.add(product, quantity);
+    if (!this.cart.add(product, quantity)) {
+      return;
+    }
     this.snackBar
       .open(`${quantity} x ${product.name} added to the cart`, 'View cart', { duration: 4000 })
       .onAction()

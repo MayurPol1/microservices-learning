@@ -22,15 +22,22 @@
       </p>
     </mat-card-content>
     <mat-card-actions class="actions">
-      <mat-form-field appearance="outline" subscriptSizing="dynamic" class="quantity">
-        <mat-label>Quantity</mat-label>
-        <input matInput type="number" min="1" [max]="p.availableStock"
-               [ngModel]="quantity()" (ngModelChange)="quantity.set($event)" />
-      </mat-form-field>
-      <button mat-flat-button [disabled]="p.availableStock === 0 || quantity() < 1" (click)="addToCart(p)">
-        <mat-icon>add_shopping_cart</mat-icon>
-        Add to cart
-      </button>
+      @if (auth.isLoggedIn()) {
+        <mat-form-field appearance="outline" subscriptSizing="dynamic" class="quantity">
+          <mat-label>Quantity</mat-label>
+          <input matInput type="number" min="1" [max]="p.availableStock"
+                 [ngModel]="quantity()" (ngModelChange)="quantity.set($event)" />
+        </mat-form-field>
+        <button mat-flat-button [disabled]="p.availableStock === 0 || quantity() < 1" (click)="addToCart(p)">
+          <mat-icon>add_shopping_cart</mat-icon>
+          Add to cart
+        </button>
+      } @else {
+        <a mat-stroked-button routerLink="/login" [queryParams]="{ returnUrl: '/products/' + p.id }">
+          <mat-icon>login</mat-icon>
+          Log in to buy
+        </a>
+      }
     </mat-card-actions>
   </mat-card>
 } @else if (notFound()) {
