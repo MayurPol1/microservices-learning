@@ -7,7 +7,9 @@
       1. waits until the gateway can reach Catalog (and Catalog its database);
       2. places one order that should be CONFIRMED and one that should be REJECTED;
       3. polls each order until it leaves "Pending" (eventual consistency in action);
-      4. shows the notifications and the trace id to open in the Aspire Dashboard.
+      4. shows the notifications and the trace id to open in the Aspire Dashboard;
+      5. cancels the confirmed order and checks that Catalog gives the stock back;
+      6. checks the roles: anonymous, customer and admin get 401, 403 and 200 where they should.
     Works in Windows PowerShell 5.1 and PowerShell 7.
 
 .EXAMPLE
@@ -45,6 +47,12 @@ function Invoke-Api([string]$Method, [string]$Path, $Body = $null, [string]$Toke
     }
 }
 
+# Like Invoke-Api, but returns only the HTTP status, also for 4xx answers (which Invoke-WebRequest throws).
+function Get-StatusCode([string]$Method, [string]$Path, $Body = $null, [string]$Token = $null) {
+    try { (Invoke-Api $Method $Path $Body $Token).Status }
+    catch { [int]$_.Exception.Response.StatusCode }
+}
+
 function Wait-ForOutcome([string]$OrderId) {
     $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
     $last = ''
@@ -78,10 +86,7 @@ $adminToken = (Invoke-Api POST '/api/auth/login' $AdminLogin).Body.accessToken
 $customerToken = (Invoke-Api POST '/api/auth/login' $CustomerLogin).Body.accessToken
 Write-Host "   Logged in as $($AdminLogin.email) (Admin) and $($CustomerLogin.email) (Customer)"
 
-# Put back what the confirmed order below will take, so the script can run again and again.
-# Restocking is admin-only.
-Invoke-Api POST "/api/products/$KeyboardId/restock" @{ quantity = 1 } $adminToken | Out-Null
-Invoke-Api POST "/api/products/$CableId/restock" @{ quantity = 2 } $adminToken | Out-Null
+# Step 5 cancels the confirmed order, which gives its stock back, so the script can run again and again.
 
 Write-Host "2. Placing an order that should be CONFIRMED (1 keyboard, 2 cables)"
 # No email in the body: the order's owner comes from the customer's token.
@@ -113,15 +118,42 @@ do {
 } while ($notes.Count -lt 2 -and (Get-Date) -lt $deadline)
 $notes | Format-Table sentAtUtc, to, subject -AutoSize | Out-String | Write-Host
 
-$passed = $goodFinal.status -eq 'Confirmed' -and $badFinal.status -eq 'Rejected' -and $notes.Count -ge 2
+$confirmedOk = $goodFinal.status -eq 'Confirmed' -and $badFinal.status -eq 'Rejected' -and $notes.Count -ge 2
+
+Write-Host "5. Cancelling the confirmed order (a compensating action: Catalog gives the stock back)"
+$stockBefore = (Invoke-Api GET "/api/products/$KeyboardId").Body.availableStock
+$cancelled = (Invoke-Api POST "/api/orders/$($good.Body.id)/cancel" -Token $customerToken).Body
+Write-Host "   order is $($cancelled.status); keyboards in stock before the release: $stockBefore"
+$deadline = (Get-Date).AddSeconds(15)
+do {
+    Start-Sleep -Milliseconds 500
+    $stockAfter = (Invoke-Api GET "/api/products/$KeyboardId").Body.availableStock
+    $notes = @((Invoke-Api GET "/api/notifications?orderId=$($good.Body.id)" -Token $customerToken).Body)
+} while (($stockAfter -lt $stockBefore + 1 -or $notes.Count -lt 3) -and (Get-Date) -lt $deadline)
+Write-Host "   keyboards in stock after the release:  $stockAfter"
+Write-Host "   emails for this order: $($notes.Count) (latest: '$($notes[0].subject)')"
+$cancelOk = $cancelled.status -eq 'Cancelled' -and $stockAfter -eq $stockBefore + 1 -and $notes.Count -ge 3
+
+Write-Host ""
+Write-Host "6. Role checks"
+$checks = @(
+    [pscustomobject]@{ Check = 'Anonymous lists orders';       Expected = 401; Actual = (Get-StatusCode GET '/api/orders') }
+    [pscustomobject]@{ Check = 'Customer restocks a product';  Expected = 403; Actual = (Get-StatusCode POST "/api/products/$KeyboardId/restock" @{ quantity = 1 } $customerToken) }
+    [pscustomobject]@{ Check = 'Customer lists own orders';    Expected = 200; Actual = (Get-StatusCode GET '/api/orders' -Token $customerToken) }
+    [pscustomobject]@{ Check = 'Admin lists all orders';       Expected = 200; Actual = (Get-StatusCode GET '/api/orders' -Token $adminToken) }
+)
+$checks | Format-Table -AutoSize | Out-String | Write-Host
+$rolesOk = @($checks | Where-Object { $_.Expected -ne $_.Actual }).Count -eq 0
+
+$passed = $confirmedOk -and $cancelOk -and $rolesOk
 
 Write-Host "Follow the confirmed order through every service in the Aspire Dashboard:"
 Write-Host "   http://localhost:18888/traces/detail/$($good.TraceId)"
 Write-Host "   (or open http://localhost:18888, Traces, and filter by that trace id)"
 Write-Host ""
 if ($passed) {
-    Write-Host "PASS: confirmed + rejected + notifications, all through the gateway." -ForegroundColor Green
+    Write-Host "PASS: confirmed + rejected + notifications + cancel + roles, all through the gateway." -ForegroundColor Green
     exit 0
 }
-Write-Host "FAIL: expected Confirmed/Rejected and 2 notifications; got '$($goodFinal.status)', '$($badFinal.status)', $($notes.Count) notification(s)." -ForegroundColor Red
+Write-Host "FAIL: order flow ok = $confirmedOk ('$($goodFinal.status)', '$($badFinal.status)'), cancel ok = $cancelOk, roles ok = $rolesOk." -ForegroundColor Red
 exit 1

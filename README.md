@@ -6,11 +6,12 @@ broker**.
 
 It's built with what a .NET developer already knows (ASP.NET Core controllers, EF Core, MySQL,
 dependency injection) and adds only the pieces microservices need: an API gateway, service-to-service
-HTTP with resilience, RabbitMQ events, the outbox pattern, health checks and distributed tracing.
+HTTP with resilience, RabbitMQ events, the outbox pattern, JWT authentication with roles, health
+checks and distributed tracing.
 
 | | |
 |---|---|
-| Services | API Gateway, Catalog, Orders, Notifications, plus an Angular web shop |
+| Services | API Gateway, Identity, Catalog, Orders, Notifications, plus an Angular web shop |
 | Stack | .NET 10, ASP.NET Core (controllers), EF Core 10 + MySQL 8.4, RabbitMQ 4.3, YARP, OpenTelemetry; Angular 22 + Angular Material |
 | Runs with | `docker compose up --build` (backend) + `npm start` in `src/Web/microshop-web` (web app) |
 | Tests | xUnit v3 unit tests + `scripts/smoke-test.ps1` end-to-end |
@@ -37,12 +38,14 @@ flowchart LR
     web([Angular web shop<br/>localhost:4200]) -->|"HTTP :5000 (CORS)"| gw[API Gateway<br/>YARP]
     client([Other clients<br/>curl, requests.http]) -->|HTTP :5000| gw
 
+    gw -->|/api/auth| id[Identity.Api]
     gw -->|/api/products| cat[Catalog.Api]
     gw -->|/api/orders| ord[Orders.Api]
     gw -->|/api/notifications| notif[Notifications.Api]
 
     ord -->|"sync HTTP: GET /api/products?ids=…<br/>retry · timeout · circuit breaker"| cat
 
+    id --- iddb[(identity-db<br/>MySQL)]
     cat --- catdb[(catalog-db<br/>MySQL)]
     ord --- orddb[(orders-db<br/>MySQL)]
 
@@ -51,6 +54,7 @@ flowchart LR
     mq -->|events| notif
 
     gw -. OTLP .-> dash[Aspire Dashboard<br/>traces · logs · metrics]
+    id -. OTLP .-> dash
     cat -. OTLP .-> dash
     ord -. OTLP .-> dash
     notif -. OTLP .-> dash
@@ -60,9 +64,17 @@ flowchart LR
 |---|---|---|---|---|
 | **microshop-web** (Angular) | The shop and admin UI, the cart (in the browser) | none | the gateway only | 4200 (`npm start`) |
 | **ApiGateway** | Routing, rate limiting, CORS | none | every service (HTTP) | 5000 |
+| **Identity.Api** | Users, password hashes, roles; issues JWTs | `identity-db` | nobody (the others only check its tokens) | 5105 |
 | **Catalog.Api** | Products, prices, stock | `catalog-db` | RabbitMQ | 5101 |
 | **Orders.Api** | Orders and their lines | `orders-db` | Catalog (HTTP), RabbitMQ | 5102 |
-| **Notifications.Api** | "Emails" sent to customers | none (in memory) | RabbitMQ | 5103 |
+| **Notifications.Api** | "Emails" sent to customers | none (in memory) | RabbitMQ | 5103 or 5104\* |
+
+\* Notifications publishes the port *range* 5103-5104 so it can be scaled to two instances, and
+Docker picks either one. `docker compose port notifications-api 8080` tells you which. The gateway
+reaches it by its compose name, so this never affects the app.
+
+Every service except Identity checks the caller's JWT itself; see
+[4.12 Authentication and authorization](#412-authentication-and-authorization-jwt).
 
 The events, all on one topic exchange:
 
@@ -73,6 +85,7 @@ The events, all on one topic exchange:
 | `stock.reservation-failed` | Catalog | Orders | Not enough stock; nothing was reserved |
 | `order.confirmed` | Orders | Notifications | The order succeeded |
 | `order.rejected` | Orders | Notifications | The order failed, with a reason |
+| `order.cancelled` | Orders | Catalog, Notifications | The customer (or an admin) cancelled; Catalog gives back any stock it reserved |
 
 ---
 
@@ -91,7 +104,7 @@ The events, all on one topic exchange:
 docker compose up --build
 ```
 
-The first run downloads about 2 GB of images and builds four .NET images, so give it a few minutes.
+The first run downloads about 2 GB of images and builds five .NET images, so give it a few minutes.
 After that it starts in seconds. Add `-d` to run it in the background.
 
 | What | URL |
@@ -99,8 +112,8 @@ After that it starts in seconds. Add `-d` to run it in the background.
 | API Gateway (the only URL a client needs) | http://localhost:5000/api/products |
 | Aspire Dashboard: traces, structured logs, metrics | http://localhost:18888 |
 | RabbitMQ management UI (`microshop` / `microshop_pw`) | http://localhost:15672 |
-| Swagger UI per service (exposed for learning only) | http://localhost:5101/swagger, :5102/swagger, :5103/swagger |
-| MySQL (`catalog`/`catalog_pw`, `orders`/`orders_pw`) | localhost:13306 (catalog), localhost:13307 (orders) |
+| Swagger UI per service (exposed for learning only) | http://localhost:5101/swagger, :5102/swagger, :5103/swagger (or :5104), :5105/swagger |
+| MySQL (`catalog`/`catalog_pw`, `orders`/`orders_pw`, `identity`/`identity_pw`) | localhost:13306 (catalog), 13307 (orders), 13308 (identity) |
 
 ### Start the web shop
 
@@ -113,9 +126,33 @@ npm start
 ```
 
 `npm install` is needed the first time only. Then open **http://localhost:4200**: browse and filter
-products, add them to the cart, check out, and watch the order go from *Pending* to *Confirmed* (or
-*Rejected*) live, with the emails it triggered and a link to its trace. **Admin** has product create,
-edit, restock and delete. Details: [src/Web/microshop-web/README.md](src/Web/microshop-web/README.md).
+products, add them to the cart, log in, check out, and watch the order go from *Pending* to
+*Confirmed* (or *Rejected*) live, with the emails it triggered and a link to its trace. Cancel it and
+watch the stock come back. Log in as the admin to get **Admin**: product create, edit (price),
+restock and delete. Details: [src/Web/microshop-web/README.md](src/Web/microshop-web/README.md).
+
+### Log in: demo accounts and roles
+
+The Identity service seeds two accounts the first time it starts:
+
+| Account | Password | Role |
+|---|---|---|
+| `admin@microshop.local` | `Admin123!` | Admin |
+| `customer@microshop.local` | `Customer123!` | Customer |
+
+Anyone can register more (`POST /api/auth/register`, or **Create an account** in the web app); new
+accounts are always *Customer*. These are demo passwords for a local learning project.
+
+| Action | Anonymous | Customer | Admin |
+|---|---|---|---|
+| Browse and search products | yes | yes | yes |
+| Fill a cart (it lives in the browser) | yes | yes | yes |
+| Place an order | 401 | yes, as themselves | yes |
+| See orders and their emails | 401 | their own | all |
+| Cancel an order | 401 | their own | any |
+| Create, edit (price), restock, delete products | 401 | 403 | yes |
+
+Asking for another customer's order gives **404**, not 403, so the API doesn't reveal that it exists.
 
 ### Test it end to end
 
@@ -123,10 +160,12 @@ edit, restock and delete. Details: [src/Web/microshop-web/README.md](src/Web/mic
 powershell -ExecutionPolicy Bypass -File scripts/smoke-test.ps1
 ```
 
-It places one order that gets **Confirmed** and one that gets **Rejected**, waits for each to leave
-*Pending*, lists the notifications, and prints a link to the confirmed order's trace. For manual
-testing, open [`requests.http`](requests.http) in Visual Studio, Rider or VS Code (REST Client) and
-send the requests one by one.
+It logs in as both demo accounts, places one order that gets **Confirmed** and one that gets
+**Rejected**, waits for each to leave *Pending*, lists the notifications, cancels the confirmed order
+and checks that its stock comes back, then checks that anonymous, customer and admin calls get 401,
+403 and 200 where they should. It also prints a link to the confirmed order's trace. For manual
+testing, open [`requests.http`](requests.http) in Visual Studio, Rider or VS Code (REST Client): run
+the two login requests first, and the rest pick up their tokens.
 
 ### Unit tests
 
@@ -151,7 +190,7 @@ Run the infrastructure (plus whatever services you're not debugging) in Docker, 
 one you want to step through:
 
 ```bash
-docker compose up -d rabbitmq catalog-db orders-db aspire-dashboard catalog-api
+docker compose up -d rabbitmq catalog-db orders-db identity-db aspire-dashboard identity-api catalog-api
 ```
 
 Then start `Orders.Api` from Visual Studio. Its `appsettings.json` already points at
@@ -177,8 +216,10 @@ sequenceDiagram
     participant MQ as RabbitMQ
     participant N as Notifications.Api
 
-    C->>G: POST /api/orders
+    Note over C,G: earlier: POST /api/auth/login, Identity returns a JWT
+    C->>G: POST /api/orders + Authorization: Bearer JWT
     G->>O: forward (+ traceparent header)
+    O->>O: validate the JWT; the customer is its sub and email claims
     O->>CA: GET /api/products?ids=… (synchronous)
     CA->>CDB: SELECT products
     CA-->>O: 200 [name, price]
@@ -279,7 +320,8 @@ host and port, and services can move, split or scale behind it.
   one that fails.
 - **Trace propagation:** the `traceparent` header is forwarded, so the trace continues downstream.
 
-Other jobs gateways often take on: authentication (validate the JWT once at the edge), TLS
+Other jobs gateways often take on: authentication (validate the JWT once at the edge; here the
+gateway only forwards the `Authorization` header and each service validates it, see 4.12), TLS
 termination, request aggregation (one client call fanning out to several services, the *Backend
 for Frontend* pattern), and caching. Keep **business logic out** of the gateway, or it turns into
 the new monolith.
@@ -354,11 +396,26 @@ The alternative is **orchestration**: one component (for example a state machine
 each service what to do next. Choreography is simpler for short flows; orchestration is easier to
 follow once there are many steps.
 
-When a later step fails, a saga can't roll back. It **compensates** with another action, for example
-"order cancelled → release the stock". See exercise 1.
+When a later step fails, or the customer changes their mind, a saga can't roll back. It
+**compensates** with another action. Here: `POST /api/orders/{id}/cancel` marks the order
+*Cancelled* and publishes `order.cancelled`; Catalog gives back the stock it reserved for that order.
 
-*In this repo:* [OrderPlacedHandler.cs](src/Services/Catalog.Api/Messaging/OrderPlacedHandler.cs)
-and [StockEventsHandler.cs](src/Services/Orders.Api/Messaging/StockEventsHandler.cs).
+`order.cancelled` → Catalog releases the reservation → Notifications sends "Your order was cancelled"
+
+Two details make the compensation safe:
+
+- **Catalog remembers what it reserved.** `OrderPlacedHandler` writes a `stock_reservations` row
+  with its lines; `OrderCancelledHandler` releases exactly those, once (`ReleasedAtUtc`), and does
+  nothing if the order was never reserved (it was rejected).
+- **Cancel before confirm.** Orders publishes `order.placed` and `order.cancelled` from its outbox
+  in order, and Catalog's queue is handled one message at a time, so Catalog reserves and then
+  releases. When the late `stock.reserved` reaches Orders,
+  `Confirm()` sees the order is already Cancelled and ignores it.
+
+*In this repo:* [OrderPlacedHandler.cs](src/Services/Catalog.Api/Messaging/OrderPlacedHandler.cs),
+[OrderCancelledHandler.cs](src/Services/Catalog.Api/Messaging/OrderCancelledHandler.cs),
+[StockEventsHandler.cs](src/Services/Orders.Api/Messaging/StockEventsHandler.cs) and
+`Cancel()` in [Order.cs](src/Services/Orders.Api/Domain/Order.cs).
 
 ### 4.7 Reliable messaging: outbox, idempotency, dead letters
 
@@ -459,10 +516,39 @@ There are two shared projects, with different rules:
   tiny, dependency-free and backward compatible. With separate repos you'd publish them as a
   versioned NuGet package or a schema.
 - **[BuildingBlocks](src/Shared/BuildingBlocks):** infrastructure plumbing (service defaults,
-  messaging, outbox). Sharing it is convenient but couples services' upgrade cycles. Many teams
+  messaging, outbox, JWT validation). Sharing it is convenient but couples services' upgrade cycles. Many teams
   accept that for plumbing.
 - **Never share domain logic or entities.** If Catalog and Orders shared a `Product` class, every
   change would need both teams and both deployments.
+
+### 4.12 Authentication and authorization (JWT)
+
+**Identity** is a service like the others, with its own database (`identity-db`, table `users`). It
+hashes passwords with ASP.NET Core's `PasswordHasher` (PBKDF2) and, on login, issues a **JWT**
+signed with HS256 that carries `sub` (the user id), `email` and `role`, valid for 2 hours.
+
+The other services never call Identity. Each one **validates the token itself** (signature, issuer,
+audience, lifetime) with one shared helper, `builder.AddJwtAuthentication()` in
+[JwtAuthentication.cs](src/Shared/BuildingBlocks/Security/JwtAuthentication.cs). So logins fail
+while Identity is down, but everyone who already has a token keeps working.
+
+Authorization has two layers:
+
+- **Roles on endpoints.** `[Authorize(Roles = Roles.Admin)]` on Catalog's create, update, restock
+  and delete ([ProductsController.cs](src/Services/Catalog.Api/Controllers/ProductsController.cs));
+  plain `[Authorize]` on Orders and Notifications. Product reads stay public.
+- **Ownership in the query.** Orders filters by `CustomerId == the token's sub` unless the caller is
+  an admin ([OrdersController.cs](src/Services/Orders.Api/Controllers/OrdersController.cs)), and
+  Notifications filters by email the same way. The owner always comes from the token, never from the
+  request body, so nobody can order "as" someone else.
+
+The gateway only forwards the `Authorization` header. Checking in every service and not only at the
+edge is *defense in depth*: a request that reaches a service some other way still needs a valid token.
+
+Simplifications to know about: every service shares one symmetric key, so a service that can
+*check* tokens could also *issue* them (production uses RS256/ES256 with public keys published as
+JWKS; exercise 1); there are no refresh tokens (exercise 2); and the key sits in `appsettings.json`
+(production reads it from a secret store).
 
 ---
 
@@ -543,7 +629,7 @@ nothing changes.
 
 ```
 microservices-learning/
-├── docker-compose.yml            # the whole system: 4 services, 2 MySQL, RabbitMQ, dashboard
+├── docker-compose.yml            # the whole system: 5 services, 3 MySQL, RabbitMQ, dashboard
 ├── Directory.Build.props         # net10.0, nullable, implicit usings for every project
 ├── Directory.Packages.props      # every NuGet version, in one place
 ├── requests.http                 # manual API calls
@@ -553,6 +639,7 @@ microservices-learning/
 │   ├── Web/
 │   │   └── microshop-web/        # Angular 22 + Angular Material shop and admin (its own README)
 │   ├── Services/
+│   │   ├── Identity.Api/         # Controllers/ Domain/ Data/ Security/ (TokenService) + Dockerfile
 │   │   ├── Catalog.Api/          # Controllers/ Domain/ Data/ Messaging/ + Dockerfile
 │   │   ├── Orders.Api/           # Controllers/ Domain/ Data/ Clients/ Messaging/ + Dockerfile
 │   │   └── Notifications.Api/    # Controllers/ Messaging/ NotificationStore + Dockerfile
@@ -561,11 +648,12 @@ microservices-learning/
 │       └── BuildingBlocks/
 │           ├── ServiceDefaults/  # logging, health, OpenTelemetry, X-Trace-Id
 │           ├── Persistence/      # create database with retry
+│           ├── Security/         # JWT validation, roles, claims helpers
 │           └── Messaging/        # RabbitMQ connection, consumer, topology, telemetry
 │               └── Outbox/       # outbox + inbox tables, publisher loop
 └── tests/
-    ├── Catalog.Tests/            # Product rules, OrderPlacedHandler (in-memory EF)
-    ├── Orders.Tests/             # Order state machine
+    ├── Catalog.Tests/            # Product rules, OrderPlacedHandler, OrderCancelledHandler (in-memory EF)
+    ├── Orders.Tests/             # Order state machine, including cancel
     └── BuildingBlocks.Tests/     # trace context through message headers
 ```
 
@@ -592,6 +680,10 @@ git show <commit>            # the full diff, with the explanation in the commit
 | 7 | Tests, smoke test, this README | verifying a distributed system |
 | 8 | Catalog categories, search, edit/delete; CORS at the gateway | evolving an API without breaking a consumer (Orders), CORS |
 | 9 | Angular web shop + admin | a front end that only knows the gateway; seeing eventual consistency in the UI |
+| 10 | Identity service: register, log in, JWTs | a service that owns users, password hashing, stateless tokens |
+| 11 | JWT validation and roles in every service | authentication vs authorization, roles, ownership checks, defense in depth |
+| 12 | Cancel an order, release its stock | compensating action, idempotent consumer, events that arrive "too late" |
+| 13 | Log in, roles and cancel in the web app | Bearer interceptor, route guards, showing only what a role may do |
 
 To run an older step: `git checkout <commit>`, then `docker compose down -v` and
 `docker compose up --build`. The `-v` matters: `EnsureCreated` never alters existing tables, so a
@@ -604,12 +696,11 @@ exactly this reason (exercise 3). Return with `git checkout main`.
 
 Roughly in order of difficulty. Each one teaches something new.
 
-1. **Cancel an order (a compensating action).** Add `POST /api/orders/{id}/cancel`, publish
-   `order.cancelled`, and have Catalog put the stock back. What should happen if the cancel arrives
-   *before* `stock.reserved`?
-2. **Authentication at the edge.** Validate a JWT in the gateway (you know JWT and RBAC already),
-   forward the user's identity, and also validate in each service ("zero trust": never rely on the
-   gateway alone).
+1. **Asymmetric keys (RS256 + JWKS).** Keep the private key in Identity only, publish the public
+   key at `/.well-known/jwks.json`, and point the services at it (`Authority` or `MetadataAddress`).
+   Now a leaked service config can check tokens but no longer mint them.
+2. **Refresh tokens and revocation.** Short access tokens (5 minutes) plus a refresh token stored in
+   `identity-db` that can be revoked. What does "log out" mean for an access token already issued?
 3. **EF Core migrations per service** instead of `EnsureCreated`, applied at startup or in a
    separate deploy step.
 4. **Delayed retries for messages.** Replace the 3 immediate attempts with a retry queue that has a
@@ -632,6 +723,9 @@ Roughly in order of difficulty. Each one teaches something new.
     compare it with compose.
 12. **CI.** Add a GitHub Actions workflow that builds every image and runs the tests and the smoke
     test on each push.
+13. **Authorization at the gateway too.** Add YARP authorization policies per route (for example
+    product writes need the Admin role), on top of the services' own checks, and compare where each
+    check belongs.
 
 ---
 
@@ -647,6 +741,7 @@ Roughly in order of difficulty. Each one teaches something new.
 | **MySQL** via Oracle's `MySql.EntityFrameworkCore` | Supports EF Core 10 | Pomelo (the popular provider, but on EF Core 9 at the time of writing), PostgreSQL, SQL Server |
 | **Aspire Dashboard** | One container shows traces, logs and metrics together | Jaeger, Zipkin, Seq, Prometheus + Grafana, Azure Monitor |
 | **Outbox by hand** | You see exactly how it works | the outbox built into MassTransit, Wolverine or NServiceBus |
+| **Our own Identity service issuing JWTs** | Every piece is visible: hashing, claims, signing, validation | Duende IdentityServer, OpenIddict, Keycloak, Microsoft Entra ID, Auth0 |
 
 ---
 
@@ -659,5 +754,8 @@ Roughly in order of difficulty. Each one teaches something new.
 | Errors about unknown columns or tables after switching steps | `docker compose down -v`, then up again. `EnsureCreated` doesn't migrate. |
 | RabbitMQ `PRECONDITION_FAILED - inequivalent arg` | A queue exists with older settings. `docker compose down`, then up. The broker has no volume, so queues are recreated. |
 | Orders stay `Pending` | Is RabbitMQ healthy (`docker compose ps`)? Check `docker compose logs catalog-api orders-api` for handler errors, and look at the `*.dead-letter` queues. |
+| `401 Unauthorized` | No token, or it expired (2 hours). Log in again (`POST /api/auth/login`); the web app sends you to its login page by itself. |
+| `403 Forbidden` | Logged in, but not as an admin. Product changes need `admin@microshop.local`. |
+| http://localhost:5103 doesn't answer | Notifications may have got 5104 instead; see the note under the services table. |
 | Nothing in the Aspire Dashboard | It only shows data received since it started. Send a request, then refresh. |
 | `An Application Control policy has blocked this file` from `dotnet run`/`dotnet test` | Windows **Smart App Control** is blocking a freshly built, unsigned file (seen on this machine with `Catalog.Tests.dll`). Docker is unaffected, because the containers are Linux. Options: run the tests in Docker or CI, or turn Smart App Control off under *Windows Security → App & browser control* (on some Windows versions it can't be switched back on without a reset, so check first). The repo already sets `UseAppHost=false` to avoid blocked `.exe` launchers. |
