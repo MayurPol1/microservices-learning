@@ -12,8 +12,8 @@
 
   <span class="spacer"></span>
 
-  <a mat-icon-button routerLink="/cart" aria-label="Cart">
-    <mat-icon [matBadge]="cart.count()" [matBadgeHidden]="cart.count() === 0" matBadgeColor="accent">
+  <a mat-icon-button routerLink="/cart" [attr.aria-label]="'Cart, ' + cart.count() + ' items'">
+    <mat-icon aria-hidden="false" [matBadge]="cart.count()" [matBadgeHidden]="cart.count() === 0" matBadgeColor="accent">
       shopping_cart
     </mat-icon>
   </a>
