@@ -22,12 +22,14 @@ services:
       ReverseProxy__Clusters__catalog__Destinations__primary__Address: "http://catalog-api:8080/"
       ReverseProxy__Clusters__orders__Destinations__primary__Address: "http://orders-api:8080/"
       ReverseProxy__Clusters__notifications__Destinations__primary__Address: "http://notifications-api:8080/"
+      ReverseProxy__Clusters__identity__Destinations__primary__Address: "http://identity-api:8080/"
     ports:
       - "5000:8080"
     depends_on:
       - catalog-api
       - orders-api
       - notifications-api
+      - identity-api
     restart: unless-stopped
 
   # ---------------------------------------------------------------- Observability
@@ -158,6 +160,42 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  # ---------------------------------------------------------------- Identity
+  # Users, passwords (hashed) and JWT issuing. The only service that knows who users are.
+  identity-db:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: root_pw
+      MYSQL_DATABASE: identity
+      MYSQL_USER: identity
+      MYSQL_PASSWORD: identity_pw
+    ports:
+      - "13308:3306"
+    volumes:
+      - identity-db-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+  identity-api:
+    build:
+      context: .
+      dockerfile: src/Services/Identity.Api/Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://aspire-dashboard:18889"
+      ConnectionStrings__IdentityDb: "Server=identity-db;Port=3306;Database=identity;User Id=identity;Password=identity_pw;AllowPublicKeyRetrieval=True"
+    ports:
+      - "5105:8080"
+    depends_on:
+      identity-db:
+        condition: service_healthy
+    restart: unless-stopped
+
 volumes:
   catalog-db-data:
   orders-db-data:
+  identity-db-data:

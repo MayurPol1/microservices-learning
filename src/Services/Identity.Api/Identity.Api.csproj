@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <ItemGroup>
+    <PackageReference Include="MySql.EntityFrameworkCore" />
+    <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore" />
+    <PackageReference Include="Swashbuckle.AspNetCore" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- JwtBearer (validation) and JsonWebTokenHandler (issuing) come through BuildingBlocks. -->
+    <ProjectReference Include="..\..\Shared\BuildingBlocks\BuildingBlocks.csproj" />
+  </ItemGroup>
+
+</Project>
