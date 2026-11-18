@@ -4,8 +4,13 @@ public enum OrderStatus
 {
     /// <summary>Accepted, waiting for Catalog to reserve the stock.</summary>
     Pending,
+
+    /// <summary>Stock reserved; waiting for the customer to pay.</summary>
     Confirmed,
     Rejected,
+
+    /// <summary>Payments reported that Stripe took the money (payment.succeeded).</summary>
+    Paid,
 
     /// <summary>Cancelled by the customer or an admin; any reserved stock is given back by Catalog.</summary>
     Cancelled,
@@ -37,6 +42,7 @@ public class Order
     public DateTime CreatedAtUtc { get; private set; }
     public DateTime? CompletedAtUtc { get; private set; }
     public DateTime? CancelledAtUtc { get; private set; }
+    public DateTime? PaidAtUtc { get; private set; }
     public IReadOnlyList<OrderLine> Lines => _lines;
 
     public static Order Place(Guid customerId, string customerEmail, IEnumerable<OrderLine> lines)
@@ -100,7 +106,29 @@ public class Order
     }
 
     /// <summary>
-    /// Cancels a Pending or Confirmed order. Returns false if it was already cancelled (cancelling twice is
+    /// Records the payment. Returns false if it was already recorded (a duplicate message) or if the order was
+    /// cancelled meanwhile: then Payments refunds the money, and the order stays Cancelled. Only a Confirmed
+    /// order can be paid, because Payments only starts a checkout for one.
+    /// </summary>
+    public bool MarkPaid()
+    {
+        if (Status is OrderStatus.Paid or OrderStatus.Cancelled)
+        {
+            return false;
+        }
+
+        if (Status != OrderStatus.Confirmed)
+        {
+            throw new InvalidOperationException($"Order {Id} is {Status}; only a Confirmed order can be paid.");
+        }
+
+        Status = OrderStatus.Paid;
+        PaidAtUtc = DateTime.UtcNow;
+        return true;
+    }
+
+    /// <summary>
+    /// Cancels a Pending, Confirmed or Paid order (Payments refunds a paid one). Returns false if it was already cancelled (cancelling twice is
     /// harmless). A Rejected order can't be cancelled: it never got any stock, there is nothing to undo.
     /// </summary>
     public bool Cancel()

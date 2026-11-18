@@ -111,4 +111,58 @@ public class OrderTests
         Assert.False(order.Reject("too late"));
         Assert.Equal(OrderStatus.Cancelled, order.Status);
     }
+
+    [Fact]
+    public void A_confirmed_order_can_be_paid()
+    {
+        var order = NewOrder();
+        order.Confirm();
+
+        Assert.True(order.MarkPaid());
+        Assert.Equal(OrderStatus.Paid, order.Status);
+        Assert.NotNull(order.PaidAtUtc);
+    }
+
+    [Fact]
+    public void Paying_twice_is_harmless_and_reports_no_change()
+    {
+        var order = NewOrder();
+        order.Confirm();
+        order.MarkPaid();
+
+        Assert.False(order.MarkPaid());
+        Assert.Equal(OrderStatus.Paid, order.Status);
+    }
+
+    [Fact]
+    public void A_pending_order_cannot_be_paid()
+    {
+        // Payments only starts a checkout once the stock is reserved (Confirmed).
+        var order = NewOrder();
+
+        Assert.Throws<InvalidOperationException>(() => order.MarkPaid());
+    }
+
+    [Fact]
+    public void A_payment_arriving_after_a_cancel_leaves_the_order_cancelled()
+    {
+        // Payments refunds it; the order must not come back to life as Paid.
+        var order = NewOrder();
+        order.Confirm();
+        order.Cancel();
+
+        Assert.False(order.MarkPaid());
+        Assert.Equal(OrderStatus.Cancelled, order.Status);
+    }
+
+    [Fact]
+    public void A_paid_order_can_be_cancelled()
+    {
+        var order = NewOrder();
+        order.Confirm();
+        order.MarkPaid();
+
+        Assert.True(order.Cancel());
+        Assert.Equal(OrderStatus.Cancelled, order.Status);
+    }
 }

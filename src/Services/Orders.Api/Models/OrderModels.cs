@@ -15,6 +15,7 @@ public record OrderLineDto(Guid ProductId, string ProductName, decimal UnitPrice
 
 public record OrderDto(
     Guid Id,
+    Guid CustomerId,
     string CustomerEmail,
     string Status,
     decimal Total,
@@ -22,10 +23,12 @@ public record OrderDto(
     DateTime CreatedAtUtc,
     DateTime? CompletedAtUtc,
     DateTime? CancelledAtUtc,
+    DateTime? PaidAtUtc,
     IReadOnlyList<OrderLineDto> Lines)
 {
     public static OrderDto From(Order o) => new(
         o.Id,
+        o.CustomerId,
         o.CustomerEmail,
         o.Status.ToString(),
         o.Total,
@@ -33,5 +36,6 @@ public record OrderDto(
         o.CreatedAtUtc,
         o.CompletedAtUtc,
         o.CancelledAtUtc,
+        o.PaidAtUtc,
         o.Lines.Select(l => new OrderLineDto(l.ProductId, l.ProductName, l.UnitPrice, l.Quantity, l.LineTotal)).ToList());
 }

@@ -12,6 +12,8 @@ public static class RoutingKeys
     public const string OrderCancelled = "order.cancelled";
     public const string StockReserved = "stock.reserved";
     public const string StockReservationFailed = "stock.reservation-failed";
+    public const string PaymentSucceeded = "payment.succeeded";
+    public const string PaymentRefunded = "payment.refunded";
 }
 
 /// <summary>Published by Orders when a customer places an order (status Pending).</summary>
@@ -37,3 +39,15 @@ public record OrderRejected(Guid OrderId, string CustomerEmail, string Reason);
 /// to roll back. Notifications tells the customer.
 /// </summary>
 public record OrderCancelled(Guid OrderId, string CustomerEmail, decimal Total);
+
+/// <summary>
+/// Published by Payments when Stripe has taken the money for an order. Orders marks the order Paid,
+/// Notifications sends a receipt. Amount is in the currency's normal unit (12.34, not 1234 cents).
+/// </summary>
+public record PaymentSucceeded(Guid OrderId, Guid PaymentId, string CustomerEmail, decimal Amount, string Currency);
+
+/// <summary>
+/// Published by Payments when it has refunded a payment, because the order was cancelled after (or while)
+/// it was paid. Notifications tells the customer.
+/// </summary>
+public record PaymentRefunded(Guid OrderId, Guid PaymentId, string CustomerEmail, decimal Amount, string Currency);

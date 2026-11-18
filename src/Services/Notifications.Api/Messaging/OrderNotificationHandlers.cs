@@ -13,7 +13,9 @@ public class OrderNotificationHandlers(NotificationStore store, ILogger<OrderNot
     : IIntegrationEventHandler<OrderPlaced>,
       IIntegrationEventHandler<OrderConfirmed>,
       IIntegrationEventHandler<OrderRejected>,
-      IIntegrationEventHandler<OrderCancelled>
+      IIntegrationEventHandler<OrderCancelled>,
+      IIntegrationEventHandler<PaymentSucceeded>,
+      IIntegrationEventHandler<PaymentRefunded>
 {
     public Task HandleAsync(OrderPlaced message, MessageContext context, CancellationToken ct) =>
         Send(context, message.OrderId, message.CustomerEmail,
@@ -23,7 +25,7 @@ public class OrderNotificationHandlers(NotificationStore store, ILogger<OrderNot
     public Task HandleAsync(OrderConfirmed message, MessageContext context, CancellationToken ct) =>
         Send(context, message.OrderId, message.CustomerEmail,
             "Your order is confirmed",
-            $"Good news: order {message.OrderId} ({message.Total:0.00}) is confirmed and will ship soon.");
+            $"Good news: the items in order {message.OrderId} are reserved for you. Pay {message.Total:0.00} to complete it.");
 
     public Task HandleAsync(OrderRejected message, MessageContext context, CancellationToken ct) =>
         Send(context, message.OrderId, message.CustomerEmail,
@@ -33,7 +35,17 @@ public class OrderNotificationHandlers(NotificationStore store, ILogger<OrderNot
     public Task HandleAsync(OrderCancelled message, MessageContext context, CancellationToken ct) =>
         Send(context, message.OrderId, message.CustomerEmail,
             "Your order was cancelled",
-            $"Order {message.OrderId} ({message.Total:0.00}) has been cancelled. You won't be charged for it.");
+            $"Order {message.OrderId} ({message.Total:0.00}) has been cancelled. If you already paid for it, the money is refunded.");
+
+    public Task HandleAsync(PaymentSucceeded message, MessageContext context, CancellationToken ct) =>
+        Send(context, message.OrderId, message.CustomerEmail,
+            "Payment received",
+            $"Thank you: we received {message.Amount:0.00} {message.Currency.ToUpperInvariant()} for order {message.OrderId}. It will ship soon.");
+
+    public Task HandleAsync(PaymentRefunded message, MessageContext context, CancellationToken ct) =>
+        Send(context, message.OrderId, message.CustomerEmail,
+            "Your refund is on its way",
+            $"We refunded {message.Amount:0.00} {message.Currency.ToUpperInvariant()} for cancelled order {message.OrderId}. Your bank shows it within a few days.");
 
     private Task Send(MessageContext context, Guid orderId, string to, string subject, string body)
     {

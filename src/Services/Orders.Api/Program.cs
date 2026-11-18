@@ -51,10 +51,11 @@ builder.Services.AddHttpClient<CatalogClient>(client =>
     });
 
 // Asynchronous messaging: Orders publishes order.placed (via the outbox) and listens for
-// Catalog's answer on its own "orders" queue.
+// Catalog's answer and Payments' news on its own "orders" queue.
 builder.AddMessaging(queueName: "orders")
     .Subscribe<StockReserved, StockEventsHandler>(RoutingKeys.StockReserved)
     .Subscribe<StockReservationFailed, StockEventsHandler>(RoutingKeys.StockReservationFailed)
+    .Subscribe<PaymentSucceeded, PaymentEventsHandler>(RoutingKeys.PaymentSucceeded)
     .AddOutbox<OrdersDbContext>();
 
 builder.Services.AddControllers();

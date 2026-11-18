@@ -14,14 +14,16 @@ builder.AddJwtAuthentication();
 
 builder.Services.AddSingleton<NotificationStore>();
 
-// Its own "notifications" queue, bound to three routing keys. order.placed now reaches two
+// Its own "notifications" queue, bound to every routing key that should send an email. order.placed now reaches two
 // queues (catalog and notifications): each subscriber gets its own copy (fan-out).
 // No outbox here: this service only consumes, it never publishes.
 builder.AddMessaging(queueName: "notifications")
     .Subscribe<OrderPlaced, OrderNotificationHandlers>(RoutingKeys.OrderPlaced)
     .Subscribe<OrderConfirmed, OrderNotificationHandlers>(RoutingKeys.OrderConfirmed)
     .Subscribe<OrderRejected, OrderNotificationHandlers>(RoutingKeys.OrderRejected)
-    .Subscribe<OrderCancelled, OrderNotificationHandlers>(RoutingKeys.OrderCancelled);
+    .Subscribe<OrderCancelled, OrderNotificationHandlers>(RoutingKeys.OrderCancelled)
+    .Subscribe<PaymentSucceeded, OrderNotificationHandlers>(RoutingKeys.PaymentSucceeded)
+    .Subscribe<PaymentRefunded, OrderNotificationHandlers>(RoutingKeys.PaymentRefunded);
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();

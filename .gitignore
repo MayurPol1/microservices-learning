@@ -16,3 +16,6 @@ TestResults/
 # OS
 Thumbs.db
 .DS_Store
+
+# Local secrets (Stripe test key). Copy .env.example to .env; never commit .env.
+.env

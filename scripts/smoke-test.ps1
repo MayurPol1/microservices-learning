@@ -8,8 +8,10 @@
       2. places one order that should be CONFIRMED and one that should be REJECTED;
       3. polls each order until it leaves "Pending" (eventual consistency in action);
       4. shows the notifications and the trace id to open in the Aspire Dashboard;
-      5. cancels the confirmed order and checks that Catalog gives the stock back;
-      6. checks the roles: anonymous, customer and admin get 401, 403 and 200 where they should.
+      5. asks Payments for a Stripe Checkout page for the confirmed order (skipped without a Stripe test key);
+      6. cancels the confirmed order and checks that Catalog gives the stock back (and Payments closes the page);
+      7. checks the roles: anonymous, customer and admin get 401, 403 and 200 where they should.
+    Paying itself needs a browser on Stripe's page, so the script can't do it: try it in the web app.
     Works in Windows PowerShell 5.1 and PowerShell 7.
 
 .EXAMPLE
@@ -86,7 +88,7 @@ $adminToken = (Invoke-Api POST '/api/auth/login' $AdminLogin).Body.accessToken
 $customerToken = (Invoke-Api POST '/api/auth/login' $CustomerLogin).Body.accessToken
 Write-Host "   Logged in as $($AdminLogin.email) (Admin) and $($CustomerLogin.email) (Customer)"
 
-# Step 5 cancels the confirmed order, which gives its stock back, so the script can run again and again.
+# Step 6 cancels the confirmed order, which gives its stock back, so the script can run again and again.
 
 Write-Host "2. Placing an order that should be CONFIRMED (1 keyboard, 2 cables)"
 # No email in the body: the order's owner comes from the customer's token.
@@ -120,7 +122,19 @@ $notes | Format-Table sentAtUtc, to, subject -AutoSize | Out-String | Write-Host
 
 $confirmedOk = $goodFinal.status -eq 'Confirmed' -and $badFinal.status -eq 'Rejected' -and $notes.Count -ge 2
 
-Write-Host "5. Cancelling the confirmed order (a compensating action: Catalog gives the stock back)"
+Write-Host "5. Asking Payments for a Stripe Checkout page for the confirmed order"
+$stripeConfigured = $false
+try {
+    $checkout = (Invoke-Api POST '/api/payments/checkout' @{ orderId = $good.Body.id } $customerToken).Body
+    $stripeConfigured = $true
+    Write-Host "   Stripe test page ready (payable until $($checkout.expiresAtUtc)); the web app would send the browser there."
+} catch {
+    if ([int]$_.Exception.Response.StatusCode -ne 503) { throw }
+    Write-Host "   HTTP 503: Stripe isn't configured (no STRIPE_SECRET_KEY in .env), so the Stripe checks are skipped."
+}
+
+Write-Host ""
+Write-Host "6. Cancelling the confirmed order (compensating actions: Catalog gives the stock back, Payments closes the page)"
 $stockBefore = (Invoke-Api GET "/api/products/$KeyboardId").Body.availableStock
 $cancelled = (Invoke-Api POST "/api/orders/$($good.Body.id)/cancel" -Token $customerToken).Body
 Write-Host "   order is $($cancelled.status); keyboards in stock before the release: $stockBefore"
@@ -134,26 +148,41 @@ Write-Host "   keyboards in stock after the release:  $stockAfter"
 Write-Host "   emails for this order: $($notes.Count) (latest: '$($notes[0].subject)')"
 $cancelOk = $cancelled.status -eq 'Cancelled' -and $stockAfter -eq $stockBefore + 1 -and $notes.Count -ge 3
 
+$paymentOk = $true
+if ($stripeConfigured) {
+    $deadline = (Get-Date).AddSeconds(15)
+    do {
+        Start-Sleep -Milliseconds 500
+        $attempt = @((Invoke-Api GET "/api/payments?orderId=$($good.Body.id)" -Token $customerToken).Body)[0]
+    } while ($attempt.status -ne 'Cancelled' -and (Get-Date) -lt $deadline)
+    Write-Host "   payment attempt: $($attempt.status) (Payments expired the Stripe page)"
+    $paymentOk = $attempt.status -eq 'Cancelled'
+}
+
 Write-Host ""
-Write-Host "6. Role checks"
+Write-Host "7. Role checks"
 $checks = @(
     [pscustomobject]@{ Check = 'Anonymous lists orders';       Expected = 401; Actual = (Get-StatusCode GET '/api/orders') }
     [pscustomobject]@{ Check = 'Customer restocks a product';  Expected = 403; Actual = (Get-StatusCode POST "/api/products/$KeyboardId/restock" @{ quantity = 1 } $customerToken) }
     [pscustomobject]@{ Check = 'Customer lists own orders';    Expected = 200; Actual = (Get-StatusCode GET '/api/orders' -Token $customerToken) }
     [pscustomobject]@{ Check = 'Admin lists all orders';       Expected = 200; Actual = (Get-StatusCode GET '/api/orders' -Token $adminToken) }
+    [pscustomobject]@{ Check = 'Anonymous starts a payment';   Expected = 401; Actual = (Get-StatusCode POST '/api/payments/checkout' @{ orderId = $good.Body.id }) }
+    [pscustomobject]@{ Check = "Admin pays a customer's order"; Expected = 403; Actual = (Get-StatusCode POST '/api/payments/checkout' @{ orderId = $good.Body.id } $adminToken) }
+    [pscustomobject]@{ Check = 'Customer pays a cancelled order'; Expected = 409; Actual = (Get-StatusCode POST '/api/payments/checkout' @{ orderId = $good.Body.id } $customerToken) }
 )
 $checks | Format-Table -AutoSize | Out-String | Write-Host
 $rolesOk = @($checks | Where-Object { $_.Expected -ne $_.Actual }).Count -eq 0
 
-$passed = $confirmedOk -and $cancelOk -and $rolesOk
+$passed = $confirmedOk -and $cancelOk -and $paymentOk -and $rolesOk
 
 Write-Host "Follow the confirmed order through every service in the Aspire Dashboard:"
 Write-Host "   http://localhost:18888/traces/detail/$($good.TraceId)"
 Write-Host "   (or open http://localhost:18888, Traces, and filter by that trace id)"
 Write-Host ""
 if ($passed) {
-    Write-Host "PASS: confirmed + rejected + notifications + cancel + roles, all through the gateway." -ForegroundColor Green
+    $stripeNote = if ($stripeConfigured) { 'payment page' } else { 'payments skipped (no Stripe key)' }
+    Write-Host "PASS: confirmed + rejected + notifications + $stripeNote + cancel + roles, all through the gateway." -ForegroundColor Green
     exit 0
 }
-Write-Host "FAIL: order flow ok = $confirmedOk ('$($goodFinal.status)', '$($badFinal.status)'), cancel ok = $cancelOk, roles ok = $rolesOk." -ForegroundColor Red
+Write-Host "FAIL: order flow ok = $confirmedOk ('$($goodFinal.status)', '$($badFinal.status)'), cancel ok = $cancelOk, payment ok = $paymentOk, roles ok = $rolesOk." -ForegroundColor Red
 exit 1

@@ -24,6 +24,9 @@
     <!-- Authentication: validates JWT bearer tokens (and brings the JsonWebTokenHandler that issues them). -->
     <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.14" />
 
+    <!-- Payments: Stripe's official .NET SDK (Checkout Sessions, refunds, webhook signature checks). -->
+    <PackageVersion Include="Stripe.net" Version="53.1.0" />
+
     <!-- API gateway: YARP is Microsoft's reverse proxy library. -->
     <PackageVersion Include="Yarp.ReverseProxy" Version="2.3.0" />
 

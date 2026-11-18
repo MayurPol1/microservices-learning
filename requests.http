@@ -84,6 +84,23 @@ Authorization: Bearer {{customerLogin.response.body.$.accessToken}}
 GET {{gateway}}/api/orders
 Authorization: Bearer {{customerLogin.response.body.$.accessToken}}
 
+### Pay for the confirmed order -> 200 with a Stripe Checkout URL (503 without STRIPE_SECRET_KEY in .env).
+### Open checkoutUrl in a browser and pay with test card 4242 4242 4242 4242, any future date, any CVC.
+# @name startCheckout
+POST {{gateway}}/api/payments/checkout
+Content-Type: application/json
+Authorization: Bearer {{customerLogin.response.body.$.accessToken}}
+
+{ "orderId": "{{placeOrder.response.body.$.id}}" }
+
+### The payment attempts for that order (Open -> Succeeded once paid; the order becomes Paid)
+GET {{gateway}}/api/payments?orderId={{placeOrder.response.body.$.id}}
+Authorization: Bearer {{customerLogin.response.body.$.accessToken}}
+
+### Cancel the order -> Catalog gives the stock back; Payments closes the Stripe page, or refunds if it was paid
+POST {{gateway}}/api/orders/{{placeOrder.response.body.$.id}}/cancel
+Authorization: Bearer {{customerLogin.response.body.$.accessToken}}
+
 ### Ask for more monitors than exist -> 202 now, Rejected a moment later
 POST {{gateway}}/api/orders
 Content-Type: application/json
@@ -157,3 +174,6 @@ GET http://localhost:5103/health/ready
 
 ###
 GET http://localhost:5105/health/ready
+
+###
+GET http://localhost:5106/health/ready

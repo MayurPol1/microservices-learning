@@ -12,3 +12,6 @@ scripts/
 # The Angular app is built with Node, not .NET; keep it (and its 250 MB node_modules) out of the .NET builds.
 src/Web/
 **/node_modules/
+
+# Local secrets: keep them out of the build context too.
+.env
