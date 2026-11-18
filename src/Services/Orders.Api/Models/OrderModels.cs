@@ -21,6 +21,7 @@ public record OrderDto(
     string? RejectionReason,
     DateTime CreatedAtUtc,
     DateTime? CompletedAtUtc,
+    DateTime? CancelledAtUtc,
     IReadOnlyList<OrderLineDto> Lines)
 {
     public static OrderDto From(Order o) => new(
@@ -31,5 +32,6 @@ public record OrderDto(
         o.RejectionReason,
         o.CreatedAtUtc,
         o.CompletedAtUtc,
+        o.CancelledAtUtc,
         o.Lines.Select(l => new OrderLineDto(l.ProductId, l.ProductName, l.UnitPrice, l.Quantity, l.LineTotal)).ToList());
 }

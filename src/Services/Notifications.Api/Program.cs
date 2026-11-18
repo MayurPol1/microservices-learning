@@ -20,7 +20,8 @@ builder.Services.AddSingleton<NotificationStore>();
 builder.AddMessaging(queueName: "notifications")
     .Subscribe<OrderPlaced, OrderNotificationHandlers>(RoutingKeys.OrderPlaced)
     .Subscribe<OrderConfirmed, OrderNotificationHandlers>(RoutingKeys.OrderConfirmed)
-    .Subscribe<OrderRejected, OrderNotificationHandlers>(RoutingKeys.OrderRejected);
+    .Subscribe<OrderRejected, OrderNotificationHandlers>(RoutingKeys.OrderRejected)
+    .Subscribe<OrderCancelled, OrderNotificationHandlers>(RoutingKeys.OrderCancelled);
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();

@@ -61,4 +61,54 @@ public class OrderTests
 
         Assert.Throws<InvalidOperationException>(() => order.Reject("too late"));
     }
+
+    [Fact]
+    public void A_pending_order_can_be_cancelled()
+    {
+        var order = NewOrder();
+
+        Assert.True(order.Cancel());
+        Assert.Equal(OrderStatus.Cancelled, order.Status);
+        Assert.NotNull(order.CancelledAtUtc);
+    }
+
+    [Fact]
+    public void A_confirmed_order_can_be_cancelled()
+    {
+        var order = NewOrder();
+        order.Confirm();
+
+        Assert.True(order.Cancel());
+        Assert.Equal(OrderStatus.Cancelled, order.Status);
+    }
+
+    [Fact]
+    public void Cancelling_twice_is_harmless_and_reports_no_change()
+    {
+        var order = NewOrder();
+        order.Cancel();
+
+        Assert.False(order.Cancel());
+    }
+
+    [Fact]
+    public void A_rejected_order_cannot_be_cancelled()
+    {
+        var order = NewOrder();
+        order.Reject("Out of stock");
+
+        Assert.Throws<InvalidOperationException>(() => order.Cancel());
+    }
+
+    [Fact]
+    public void Stock_results_arriving_after_a_cancel_are_ignored()
+    {
+        // The customer cancelled while Catalog was still reserving: the late result must not revive the order.
+        var order = NewOrder();
+        order.Cancel();
+
+        Assert.False(order.Confirm());
+        Assert.False(order.Reject("too late"));
+        Assert.Equal(OrderStatus.Cancelled, order.Status);
+    }
 }

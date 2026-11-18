@@ -12,7 +12,8 @@ namespace Notifications.Api.Messaging;
 public class OrderNotificationHandlers(NotificationStore store, ILogger<OrderNotificationHandlers> logger)
     : IIntegrationEventHandler<OrderPlaced>,
       IIntegrationEventHandler<OrderConfirmed>,
-      IIntegrationEventHandler<OrderRejected>
+      IIntegrationEventHandler<OrderRejected>,
+      IIntegrationEventHandler<OrderCancelled>
 {
     public Task HandleAsync(OrderPlaced message, MessageContext context, CancellationToken ct) =>
         Send(context, message.OrderId, message.CustomerEmail,
@@ -28,6 +29,11 @@ public class OrderNotificationHandlers(NotificationStore store, ILogger<OrderNot
         Send(context, message.OrderId, message.CustomerEmail,
             "We couldn't complete your order",
             $"Sorry, order {message.OrderId} was rejected: {message.Reason}");
+
+    public Task HandleAsync(OrderCancelled message, MessageContext context, CancellationToken ct) =>
+        Send(context, message.OrderId, message.CustomerEmail,
+            "Your order was cancelled",
+            $"Order {message.OrderId} ({message.Total:0.00}) has been cancelled. You won't be charged for it.");
 
     private Task Send(MessageContext context, Guid orderId, string to, string subject, string body)
     {

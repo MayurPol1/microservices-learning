@@ -29,6 +29,7 @@ builder.Services.AddHealthChecks()
 // and publishes its own events through the outbox table.
 builder.AddMessaging(queueName: "catalog")
     .Subscribe<OrderPlaced, OrderPlacedHandler>(RoutingKeys.OrderPlaced)
+    .Subscribe<OrderCancelled, OrderCancelledHandler>(RoutingKeys.OrderCancelled)
     .AddOutbox<CatalogDbContext>();
 
 builder.Services.AddControllers();

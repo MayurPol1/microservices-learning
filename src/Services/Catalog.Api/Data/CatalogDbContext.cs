@@ -12,6 +12,7 @@ namespace Catalog.Api.Data;
 public class CatalogDbContext(DbContextOptions<CatalogDbContext> options) : DbContext(options), IMessagingDbContext
 {
     public DbSet<Product> Products => Set<Product>();
+    public DbSet<StockReservation> StockReservations => Set<StockReservation>();
 
     // Outbox (events waiting to be published) and inbox (messages already handled),
     // in the same database so they share transactions with Products.
@@ -30,6 +31,22 @@ public class CatalogDbContext(DbContextOptions<CatalogDbContext> options) : DbCo
             product.Property(p => p.Category).HasMaxLength(Product.CategoryMaxLength).IsRequired();
             product.Property(p => p.Version).IsConcurrencyToken();
             product.HasIndex(p => p.Category);
+        });
+
+        modelBuilder.Entity<StockReservation>(reservation =>
+        {
+            reservation.ToTable("stock_reservations");
+            reservation.HasKey(r => r.OrderId);
+            reservation.Property(r => r.OrderId).ValueGeneratedNever();
+            reservation.Ignore(r => r.IsReleased);
+            reservation.HasMany(r => r.Lines).WithOne().HasForeignKey("OrderId").OnDelete(DeleteBehavior.Cascade);
+            reservation.Navigation(r => r.Lines).UsePropertyAccessMode(PropertyAccessMode.Field);
+        });
+
+        modelBuilder.Entity<StockReservationLine>(line =>
+        {
+            line.ToTable("stock_reservation_lines");
+            line.HasKey(l => l.Id);
         });
 
         modelBuilder.AddMessagingTables();

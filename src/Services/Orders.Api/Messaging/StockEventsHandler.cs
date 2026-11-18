@@ -32,6 +32,12 @@ public class StockEventsHandler(OrdersDbContext db, ILogger<StockEventsHandler> 
             db.AddToOutbox(RoutingKeys.OrderConfirmed, new OrderConfirmed(order.Id, order.CustomerEmail, order.Total));
             logger.LogInformation("Order {OrderId} confirmed", order.Id);
         }
+        else if (order.Status == Domain.OrderStatus.Cancelled)
+        {
+            // The customer cancelled while Catalog was reserving. Nothing to do here: Catalog handles
+            // order.cancelled after order.placed (same queue, in order) and gives the stock back.
+            logger.LogInformation("Stock reserved for order {OrderId}, which was already cancelled; Catalog will release it", order.Id);
+        }
 
         db.MarkAsProcessed(context);
         await db.SaveChangesAsync(ct);

@@ -43,6 +43,11 @@ public class OrderPlacedHandler(CatalogDbContext db, ILogger<OrderPlacedHandler>
                 products[productId].Reserve(quantity);
             }
 
+            // Remember what was taken for this order, so a cancellation can give back exactly this.
+            db.StockReservations.Add(new StockReservation(
+                message.OrderId,
+                wanted.Select(w => new StockReservationLine(w.Key, w.Value))));
+
             db.AddToOutbox(RoutingKeys.StockReserved, new StockReserved(message.OrderId));
             logger.LogInformation("Reserved stock for order {OrderId}", message.OrderId);
         }

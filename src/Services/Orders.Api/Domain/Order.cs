@@ -6,6 +6,9 @@ public enum OrderStatus
     Pending,
     Confirmed,
     Rejected,
+
+    /// <summary>Cancelled by the customer or an admin; any reserved stock is given back by Catalog.</summary>
+    Cancelled,
 }
 
 /// <summary>
@@ -33,6 +36,7 @@ public class Order
     public string? RejectionReason { get; private set; }
     public DateTime CreatedAtUtc { get; private set; }
     public DateTime? CompletedAtUtc { get; private set; }
+    public DateTime? CancelledAtUtc { get; private set; }
     public IReadOnlyList<OrderLine> Lines => _lines;
 
     public static Order Place(Guid customerId, string customerEmail, IEnumerable<OrderLine> lines)
@@ -62,10 +66,14 @@ public class Order
         return order;
     }
 
-    /// <summary>Returns false if the order was already confirmed (a duplicate message is harmless).</summary>
+    /// <summary>
+    /// Returns false (nothing changes) if the order was already confirmed, a harmless duplicate message,
+    /// or already cancelled: the customer cancelled while Catalog was still reserving the stock, and
+    /// Catalog gives that stock back when it handles order.cancelled.
+    /// </summary>
     public bool Confirm()
     {
-        if (Status == OrderStatus.Confirmed)
+        if (Status is OrderStatus.Confirmed or OrderStatus.Cancelled)
         {
             return false;
         }
@@ -76,10 +84,10 @@ public class Order
         return true;
     }
 
-    /// <summary>Returns false if the order was already rejected.</summary>
+    /// <summary>Returns false if the order was already rejected or cancelled.</summary>
     public bool Reject(string reason)
     {
-        if (Status == OrderStatus.Rejected)
+        if (Status is OrderStatus.Rejected or OrderStatus.Cancelled)
         {
             return false;
         }
@@ -88,6 +96,27 @@ public class Order
         Status = OrderStatus.Rejected;
         RejectionReason = reason;
         CompletedAtUtc = DateTime.UtcNow;
+        return true;
+    }
+
+    /// <summary>
+    /// Cancels a Pending or Confirmed order. Returns false if it was already cancelled (cancelling twice is
+    /// harmless). A Rejected order can't be cancelled: it never got any stock, there is nothing to undo.
+    /// </summary>
+    public bool Cancel()
+    {
+        if (Status == OrderStatus.Cancelled)
+        {
+            return false;
+        }
+
+        if (Status == OrderStatus.Rejected)
+        {
+            throw new InvalidOperationException($"Order {Id} was rejected, so there is nothing to cancel.");
+        }
+
+        Status = OrderStatus.Cancelled;
+        CancelledAtUtc = DateTime.UtcNow;
         return true;
     }
 

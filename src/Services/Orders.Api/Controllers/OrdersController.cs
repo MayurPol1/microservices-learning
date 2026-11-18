@@ -103,6 +103,39 @@ public class OrdersController(OrdersDbContext db, CatalogClient catalog, ILogger
     }
 
     /// <summary>
+    /// Cancels your order (admins: any order). The order is marked Cancelled and an order.cancelled event
+    /// goes into the outbox in the same transaction; Catalog then gives back the reserved stock.
+    /// Cancelling twice is harmless; a rejected order can't be cancelled (409).
+    /// </summary>
+    [HttpPost("{id:guid}/cancel")]
+    [ProducesResponseType<OrderDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<OrderDto>> CancelOrder(Guid id, CancellationToken ct)
+    {
+        var order = await VisibleOrders().Include(o => o.Lines).FirstOrDefaultAsync(o => o.Id == id, ct);
+        if (order is null)
+        {
+            return NotFound();
+        }
+
+        if (order.Status == OrderStatus.Rejected)
+        {
+            return Problem(statusCode: StatusCodes.Status409Conflict, title: "Order can't be cancelled",
+                detail: "This order was rejected, so there is nothing to cancel.");
+        }
+
+        if (order.Cancel())
+        {
+            db.AddToOutbox(RoutingKeys.OrderCancelled, new OrderCancelled(order.Id, order.CustomerEmail, order.Total));
+            await db.SaveChangesAsync(ct);
+            logger.LogInformation("Order {OrderId} cancelled by {Role}", order.Id, User.IsAdmin() ? "admin" : "customer");
+        }
+
+        return OrderDto.From(order);
+    }
+
+    /// <summary>
     /// The orders the caller may see. Filtering in the query (rather than loading and then checking)
     /// means another customer's order simply isn't found: 404, which doesn't even reveal that it exists.
     /// </summary>
