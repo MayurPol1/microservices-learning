@@ -1,6 +1,8 @@
 ### MicroShop: try the API by hand.
 ### Open this file in Visual Studio 2022+, Rider, or VS Code with the REST Client extension
 ### and click "Send request" above each block. Start the system first: docker compose up --build
+###
+### Run the two LOGIN requests first: later requests reuse their tokens.
 
 @gateway = http://localhost:5000
 @keyboardId = 11111111-1111-1111-1111-111111111111
@@ -8,22 +10,62 @@
 @monitorId = 33333333-3333-3333-3333-333333333333
 @cableId = 44444444-4444-4444-4444-444444444444
 
+### ------------------------------------------------------------------ identity
+
+### LOGIN as the demo customer -> a JWT in accessToken
+# @name customerLogin
+POST {{gateway}}/api/auth/login
+Content-Type: application/json
+
+{ "email": "customer@microshop.local", "password": "Customer123!" }
+
+### LOGIN as the demo admin
+# @name adminLogin
+POST {{gateway}}/api/auth/login
+Content-Type: application/json
+
+{ "email": "admin@microshop.local", "password": "Admin123!" }
+
+### Who am I? (decode the token at https://jwt.io to see its claims: sub, email, role)
+GET {{gateway}}/api/auth/me
+Authorization: Bearer {{customerLogin.response.body.$.accessToken}}
+
+### Register a new customer (409 if the email exists, 400 if the password is under 8 characters)
+POST {{gateway}}/api/auth/register
+Content-Type: application/json
+
+{ "email": "someone@example.com", "password": "Secret123!" }
+
+### ------------------------------------------------------------------ shopping (public + customer)
+
 ### Gateway root: lists the routes it knows
 GET {{gateway}}/
 
-### All products (gateway -> Catalog -> catalog-db)
+### All products: public, no token needed
 GET {{gateway}}/api/products
 
 ### Two products in one call: what Orders does internally before accepting an order
 GET {{gateway}}/api/products?ids={{keyboardId}}&ids={{mouseId}}
 
-### Place an order -> 202 Accepted, status "Pending". Note the X-Trace-Id response header.
-# @name placeOrder
+### Categories, for the shop's filter
+GET {{gateway}}/api/products/categories
+
+### One page of products in a category, optionally searching the name (category match ignores case)
+GET {{gateway}}/api/products/search?category=accessories&q=&page=1&pageSize=12
+
+### Place an order WITHOUT a token -> 401
 POST {{gateway}}/api/orders
 Content-Type: application/json
 
+{ "items": [ { "productId": "{{keyboardId}}", "quantity": 1 } ] }
+
+### Place an order as the customer -> 202 Accepted, status "Pending". No email in the body: it comes from the token.
+# @name placeOrder
+POST {{gateway}}/api/orders
+Content-Type: application/json
+Authorization: Bearer {{customerLogin.response.body.$.accessToken}}
+
 {
-  "customerEmail": "ada@example.com",
   "items": [
     { "productId": "{{keyboardId}}", "quantity": 1 },
     { "productId": "{{mouseId}}", "quantity": 2 }
@@ -32,66 +74,77 @@ Content-Type: application/json
 
 ### Run this about a second later: Pending -> Confirmed (eventual consistency)
 GET {{gateway}}/api/orders/{{placeOrder.response.body.$.id}}
+Authorization: Bearer {{customerLogin.response.body.$.accessToken}}
 
 ### The "emails" Notifications sent for that order
 GET {{gateway}}/api/notifications?orderId={{placeOrder.response.body.$.id}}
+Authorization: Bearer {{customerLogin.response.body.$.accessToken}}
+
+### My orders (a customer only ever sees their own)
+GET {{gateway}}/api/orders
+Authorization: Bearer {{customerLogin.response.body.$.accessToken}}
 
 ### Ask for more monitors than exist -> 202 now, Rejected a moment later
 POST {{gateway}}/api/orders
 Content-Type: application/json
+Authorization: Bearer {{customerLogin.response.body.$.accessToken}}
 
-{
-  "customerEmail": "bob@example.com",
-  "items": [ { "productId": "{{monitorId}}", "quantity": 10 } ]
-}
+{ "items": [ { "productId": "{{monitorId}}", "quantity": 10 } ] }
 
 ### Unknown product -> 400 ValidationProblem straight away (checked synchronously with Catalog)
 POST {{gateway}}/api/orders
 Content-Type: application/json
+Authorization: Bearer {{customerLogin.response.body.$.accessToken}}
 
-{
-  "customerEmail": "ada@example.com",
-  "items": [ { "productId": "99999999-9999-9999-9999-999999999999", "quantity": 1 } ]
-}
+{ "items": [ { "productId": "99999999-9999-9999-9999-999999999999", "quantity": 1 } ] }
 
 ### Invalid request -> 400 from model validation (no service call at all)
 POST {{gateway}}/api/orders
 Content-Type: application/json
+Authorization: Bearer {{customerLogin.response.body.$.accessToken}}
 
-{ "customerEmail": "not-an-email", "items": [] }
+{ "items": [] }
 
-### Restock the monitor, then the order above would succeed
+### ------------------------------------------------------------------ admin
+
+### A customer trying an admin action -> 403 Forbidden
 POST {{gateway}}/api/products/{{monitorId}}/restock
 Content-Type: application/json
+Authorization: Bearer {{customerLogin.response.body.$.accessToken}}
 
 { "quantity": 10 }
 
-### Latest orders
+### Restock the monitor as admin, then the 10-monitor order would succeed
+POST {{gateway}}/api/products/{{monitorId}}/restock
+Content-Type: application/json
+Authorization: Bearer {{adminLogin.response.body.$.accessToken}}
+
+{ "quantity": 10 }
+
+### Every customer's orders (admin)
 GET {{gateway}}/api/orders
-
-### ------------------------------------------------------------------ added for the web app
-
-### Categories, for the shop's filter
-GET {{gateway}}/api/products/categories
-
-### One page of products in a category, optionally searching the name (category match ignores case)
-GET {{gateway}}/api/products/search?category=accessories&q=&page=1&pageSize=12
+Authorization: Bearer {{adminLogin.response.body.$.accessToken}}
 
 ### Create a product (category is required)
 # @name createProduct
 POST {{gateway}}/api/products
 Content-Type: application/json
+Authorization: Bearer {{adminLogin.response.body.$.accessToken}}
 
 { "name": "Mechanical Numpad", "description": "Hot-swap switches", "price": 29.99, "initialStock": 5, "category": "Peripherals" }
 
-### Edit it: name, description, price, category (stock only changes through restock and orders)
+### Change its price (and name, description, category). Stock only changes through restock and orders.
 PUT {{gateway}}/api/products/{{createProduct.response.body.$.id}}
 Content-Type: application/json
+Authorization: Bearer {{adminLogin.response.body.$.accessToken}}
 
 { "name": "Mechanical Numpad v2", "description": "Hot-swap switches, USB-C", "price": 34.99, "category": "Peripherals" }
 
 ### Delete it -> 204
 DELETE {{gateway}}/api/products/{{createProduct.response.body.$.id}}
+Authorization: Bearer {{adminLogin.response.body.$.accessToken}}
+
+### ------------------------------------------------------------------ health
 
 ### Health, straight to each service (these ports are exposed only for learning)
 GET http://localhost:5101/health/ready
@@ -101,3 +154,6 @@ GET http://localhost:5102/health/ready
 
 ###
 GET http://localhost:5103/health/ready
+
+###
+GET http://localhost:5105/health/ready

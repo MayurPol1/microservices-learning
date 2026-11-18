@@ -18,6 +18,7 @@ public class OrdersDbContext(DbContextOptions<OrdersDbContext> options) : DbCont
             order.ToTable("orders");
             order.HasKey(o => o.Id);
             order.Property(o => o.CustomerEmail).HasMaxLength(320).IsRequired();
+            order.HasIndex(o => o.CustomerId); // "my orders" is a common query
             order.Property(o => o.Status).HasConversion<string>().HasMaxLength(20);
             order.Property(o => o.Total).HasPrecision(18, 2);
             order.Property(o => o.RejectionReason).HasMaxLength(500);

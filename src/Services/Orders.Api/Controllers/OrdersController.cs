@@ -1,5 +1,7 @@
 using BuildingBlocks.Messaging.Outbox;
+using BuildingBlocks.Security;
 using Contracts;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Orders.Api.Clients;
@@ -9,9 +11,14 @@ using Orders.Api.Models;
 
 namespace Orders.Api.Controllers;
 
+/// <summary>
+/// Every endpoint needs a logged-in user ([Authorize] on the class: 401 without a valid token).
+/// Customers only ever see and touch their own orders; admins see all of them.
+/// </summary>
 [ApiController]
 [Route("api/orders")]
 [Produces("application/json")]
+[Authorize]
 public class OrdersController(OrdersDbContext db, CatalogClient catalog, ILogger<OrdersController> logger) : ControllerBase
 {
     /// <summary>
@@ -21,6 +28,7 @@ public class OrdersController(OrdersDbContext db, CatalogClient catalog, ILogger
     [HttpPost]
     [ProducesResponseType<OrderDto>(StatusCodes.Status202Accepted)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
     public async Task<ActionResult<OrderDto>> PlaceOrder(PlaceOrderRequest request, CancellationToken ct)
     {
@@ -50,7 +58,8 @@ public class OrdersController(OrdersDbContext db, CatalogClient catalog, ILogger
 
         // Snapshot name and price into the order lines.
         var lines = products.Select(p => new OrderLine(p.Id, p.Name, p.Price, wanted[p.Id]));
-        var order = Order.Place(request.CustomerEmail, lines);
+        // The owner comes from the verified token, not from anything the client typed.
+        var order = Order.Place(User.GetUserId(), User.GetEmail(), lines);
 
         db.Orders.Add(order);
 
@@ -76,20 +85,35 @@ public class OrdersController(OrdersDbContext db, CatalogClient catalog, ILogger
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<OrderDto>> GetOrder(Guid id, CancellationToken ct)
     {
-        var order = await db.Orders.AsNoTracking().Include(o => o.Lines).FirstOrDefaultAsync(o => o.Id == id, ct);
+        var order = await VisibleOrders().AsNoTracking().Include(o => o.Lines).FirstOrDefaultAsync(o => o.Id == id, ct);
         return order is null ? NotFound() : OrderDto.From(order);
     }
 
-    /// <summary>The 50 most recent orders.</summary>
+    /// <summary>The 50 most recent orders: your own, or everybody's if you are an admin.</summary>
     [HttpGet]
     [ProducesResponseType<IEnumerable<OrderDto>>(StatusCodes.Status200OK)]
     public async Task<IEnumerable<OrderDto>> GetOrders(CancellationToken ct)
     {
-        var orders = await db.Orders.AsNoTracking()
+        var orders = await VisibleOrders().AsNoTracking()
             .Include(o => o.Lines)
             .OrderByDescending(o => o.CreatedAtUtc)
             .Take(50)
             .ToListAsync(ct);
         return orders.Select(OrderDto.From);
+    }
+
+    /// <summary>
+    /// The orders the caller may see. Filtering in the query (rather than loading and then checking)
+    /// means another customer's order simply isn't found: 404, which doesn't even reveal that it exists.
+    /// </summary>
+    private IQueryable<Order> VisibleOrders()
+    {
+        if (User.IsAdmin())
+        {
+            return db.Orders;
+        }
+
+        var userId = User.GetUserId();
+        return db.Orders.Where(o => o.CustomerId == userId);
     }
 }

@@ -1,4 +1,5 @@
 using BuildingBlocks.Messaging;
+using BuildingBlocks.Security;
 using BuildingBlocks.Persistence;
 using BuildingBlocks.ServiceDefaults;
 using Contracts;
@@ -11,6 +12,9 @@ using Orders.Api.Messaging;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.AddServiceDefaults();
+
+// Validates the JWT that Identity issued (same key and rules as every service).
+builder.AddJwtAuthentication();
 
 // Orders' own database, separate from Catalog's.
 builder.Services.AddDbContext<OrdersDbContext>(options =>
@@ -62,6 +66,9 @@ var app = builder.Build();
 app.UseServiceDefaults();
 app.UseSwagger();
 app.UseSwaggerUI();
+
+app.UseAuthentication(); // Bearer token -> HttpContext.User
+app.UseAuthorization();  // [Authorize] and roles
 
 app.MapControllers();
 app.MapDefaultEndpoints();

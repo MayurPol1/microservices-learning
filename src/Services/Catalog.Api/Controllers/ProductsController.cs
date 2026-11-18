@@ -1,11 +1,18 @@
+using BuildingBlocks.Security;
 using Catalog.Api.Data;
 using Catalog.Api.Domain;
 using Catalog.Api.Models;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
 namespace Catalog.Api.Controllers;
 
+/// <summary>
+/// Reading the catalog is public (no attribute: anyone, even without a token). Changing it is for
+/// admins only: [Authorize(Roles = Roles.Admin)] answers 401 without a valid token and 403 for a
+/// valid token whose "role" claim isn't Admin, before the action runs.
+/// </summary>
 [ApiController]
 [Route("api/products")]
 [Produces("application/json")]
@@ -77,6 +84,9 @@ public class ProductsController(CatalogDbContext db) : ControllerBase
         return product is null ? NotFound() : ProductDto.From(product);
     }
 
+    [Authorize(Roles = Roles.Admin)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [HttpPost]
     [ProducesResponseType<ProductDto>(StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -90,6 +100,9 @@ public class ProductsController(CatalogDbContext db) : ControllerBase
     }
 
     /// <summary>Changes name, description, price and category. Stock changes only through restock and orders.</summary>
+    [Authorize(Roles = Roles.Admin)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [HttpPut("{id:guid}")]
     [ProducesResponseType<ProductDto>(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -108,6 +121,9 @@ public class ProductsController(CatalogDbContext db) : ControllerBase
     }
 
     /// <summary>Adds stock (for example after a delivery from a supplier).</summary>
+    [Authorize(Roles = Roles.Admin)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [HttpPost("{id:guid}/restock")]
     [ProducesResponseType<ProductDto>(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -129,6 +145,9 @@ public class ProductsController(CatalogDbContext db) : ControllerBase
     /// copy of the name and price (data ownership, lesson 1). An order placed for it afterwards is
     /// rejected by the stock reservation ("Product … no longer exists").
     /// </summary>
+    [Authorize(Roles = Roles.Admin)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [HttpDelete("{id:guid}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]

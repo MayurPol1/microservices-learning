@@ -1,4 +1,5 @@
 using BuildingBlocks.Messaging;
+using BuildingBlocks.Security;
 using BuildingBlocks.ServiceDefaults;
 using Contracts;
 using Notifications.Api;
@@ -7,6 +8,9 @@ using Notifications.Api.Messaging;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.AddServiceDefaults();
+
+// Validates the JWT that Identity issued (same key and rules as every service).
+builder.AddJwtAuthentication();
 
 builder.Services.AddSingleton<NotificationStore>();
 
@@ -27,6 +31,9 @@ var app = builder.Build();
 app.UseServiceDefaults();
 app.UseSwagger();
 app.UseSwaggerUI();
+
+app.UseAuthentication(); // Bearer token -> HttpContext.User
+app.UseAuthorization();  // [Authorize] and roles
 
 app.MapControllers();
 app.MapDefaultEndpoints();

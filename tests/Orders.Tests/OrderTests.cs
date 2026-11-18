@@ -4,7 +4,7 @@ namespace Orders.Tests;
 
 public class OrderTests
 {
-    private static Order NewOrder() => Order.Place("ada@example.com",
+    private static Order NewOrder() => Order.Place(Guid.NewGuid(), "ada@example.com",
     [
         new OrderLine(Guid.NewGuid(), "Keyboard", 79.99m, 1),
         new OrderLine(Guid.NewGuid(), "Mouse", 24.50m, 2),
@@ -21,7 +21,7 @@ public class OrderTests
 
     [Fact]
     public void An_order_needs_at_least_one_line() =>
-        Assert.Throws<ArgumentException>(() => Order.Place("ada@example.com", []));
+        Assert.Throws<ArgumentException>(() => Order.Place(Guid.NewGuid(), "ada@example.com", []));
 
     [Fact]
     public void Confirm_moves_a_pending_order_to_confirmed()

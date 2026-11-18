@@ -1,4 +1,5 @@
 using BuildingBlocks.Messaging;
+using BuildingBlocks.Security;
 using BuildingBlocks.Persistence;
 using BuildingBlocks.ServiceDefaults;
 using Catalog.Api.Data;
@@ -11,6 +12,9 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Logging, health checks and error format shared by every service.
 builder.AddServiceDefaults();
+
+// Validates the JWT that Identity issued (same key and rules as every service).
+builder.AddJwtAuthentication();
 
 // Catalog's own database. The connection string comes from configuration:
 // appsettings.json for local runs, the ConnectionStrings__CatalogDb environment variable in Docker.
@@ -68,6 +72,9 @@ if (failureRate > 0 || extraLatency > TimeSpan.Zero)
 // Swagger is on in every environment because this is a learning project.
 app.UseSwagger();
 app.UseSwaggerUI();
+
+app.UseAuthentication(); // Bearer token -> HttpContext.User
+app.UseAuthorization();  // [Authorize] and roles
 
 app.MapControllers();
 app.MapDefaultEndpoints();

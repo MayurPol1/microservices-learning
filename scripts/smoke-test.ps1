@@ -24,8 +24,15 @@ $KeyboardId = '11111111-1111-1111-1111-111111111111'
 $CableId    = '44444444-4444-4444-4444-444444444444'
 $MonitorId  = '33333333-3333-3333-3333-333333333333'
 
-function Invoke-Api([string]$Method, [string]$Path, $Body = $null) {
+# Demo accounts seeded by the Identity service (see README).
+$AdminLogin    = @{ email = 'admin@microshop.local';    password = 'Admin123!' }
+$CustomerLogin = @{ email = 'customer@microshop.local'; password = 'Customer123!' }
+
+function Invoke-Api([string]$Method, [string]$Path, $Body = $null, [string]$Token = $null) {
     $request = @{ Method = $Method; Uri = "$Gateway$Path"; UseBasicParsing = $true }
+    if ($Token) {
+        $request.Headers = @{ Authorization = "Bearer $Token" }
+    }
     if ($null -ne $Body) {
         $request.ContentType = 'application/json'
         $request.Body = $Body | ConvertTo-Json -Depth 5
@@ -42,7 +49,7 @@ function Wait-ForOutcome([string]$OrderId) {
     $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
     $last = ''
     while ($true) {
-        $order = (Invoke-Api GET "/api/orders/$OrderId").Body
+        $order = (Invoke-Api GET "/api/orders/$OrderId" -Token $customerToken).Body
         if ($order.status -ne $last) {
             Write-Host ("     {0:HH:mm:ss.fff}  status = {1}" -f (Get-Date), $order.status)
             $last = $order.status
@@ -66,18 +73,24 @@ while ($true) {
 }
 $products | Format-Table name, price, availableStock -AutoSize | Out-String | Write-Host
 
+# Log in through the gateway (Identity issues the JWTs).
+$adminToken = (Invoke-Api POST '/api/auth/login' $AdminLogin).Body.accessToken
+$customerToken = (Invoke-Api POST '/api/auth/login' $CustomerLogin).Body.accessToken
+Write-Host "   Logged in as $($AdminLogin.email) (Admin) and $($CustomerLogin.email) (Customer)"
+
 # Put back what the confirmed order below will take, so the script can run again and again.
-Invoke-Api POST "/api/products/$KeyboardId/restock" @{ quantity = 1 } | Out-Null
-Invoke-Api POST "/api/products/$CableId/restock" @{ quantity = 2 } | Out-Null
+# Restocking is admin-only.
+Invoke-Api POST "/api/products/$KeyboardId/restock" @{ quantity = 1 } $adminToken | Out-Null
+Invoke-Api POST "/api/products/$CableId/restock" @{ quantity = 2 } $adminToken | Out-Null
 
 Write-Host "2. Placing an order that should be CONFIRMED (1 keyboard, 2 cables)"
+# No email in the body: the order's owner comes from the customer's token.
 $good = Invoke-Api POST '/api/orders' @{
-    customerEmail = 'ada@example.com'
     items = @(
         @{ productId = $KeyboardId; quantity = 1 },
         @{ productId = $CableId; quantity = 2 }
     )
-}
+} $customerToken
 Write-Host "   HTTP $($good.Status): order $($good.Body.id) is $($good.Body.status), total $($good.Body.total)"
 Write-Host "   X-Trace-Id: $($good.TraceId)"
 $goodFinal = Wait-ForOutcome $good.Body.id
@@ -85,9 +98,8 @@ $goodFinal = Wait-ForOutcome $good.Body.id
 Write-Host ""
 Write-Host "3. Placing an order that should be REJECTED (10 monitors, only 3 in stock)"
 $bad = Invoke-Api POST '/api/orders' @{
-    customerEmail = 'bob@example.com'
     items = @(@{ productId = $MonitorId; quantity = 10 })
-}
+} $customerToken
 Write-Host "   HTTP $($bad.Status): order $($bad.Body.id) is $($bad.Body.status)"
 $badFinal = Wait-ForOutcome $bad.Body.id
 Write-Host "   reason: $($badFinal.rejectionReason)"
@@ -97,7 +109,7 @@ Write-Host "4. Notifications for the confirmed order (fan-out: Notifications hea
 $deadline = (Get-Date).AddSeconds(15)
 do {
     Start-Sleep -Milliseconds 500
-    $notes = @((Invoke-Api GET "/api/notifications?orderId=$($good.Body.id)").Body)
+    $notes = @((Invoke-Api GET "/api/notifications?orderId=$($good.Body.id)" -Token $customerToken).Body)
 } while ($notes.Count -lt 2 -and (Get-Date) -lt $deadline)
 $notes | Format-Table sentAtUtc, to, subject -AutoSize | Out-String | Write-Host
 

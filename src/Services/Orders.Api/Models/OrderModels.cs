@@ -3,9 +3,11 @@ using Orders.Api.Domain;
 
 namespace Orders.Api.Models;
 
-public record PlaceOrderRequest(
-    [Required, EmailAddress] string CustomerEmail,
-    [Required, MinLength(1)] List<OrderItemRequest> Items);
+/// <summary>
+/// Only the items. Who is ordering (id and email) comes from the JWT, never from the body:
+/// otherwise anyone could place an order in someone else's name.
+/// </summary>
+public record PlaceOrderRequest([Required, MinLength(1)] List<OrderItemRequest> Items);
 
 public record OrderItemRequest(Guid ProductId, [Range(1, 100)] int Quantity);
 

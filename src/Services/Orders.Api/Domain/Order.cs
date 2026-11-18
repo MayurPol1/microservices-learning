@@ -20,6 +20,13 @@ public class Order
     private Order() { } // for EF Core
 
     public Guid Id { get; private set; }
+
+    /// <summary>
+    /// The owner: the user id ("sub" claim) from the JWT of whoever placed the order. Orders doesn't
+    /// have a users table; it trusts the signed token, the same way a hotel trusts a passport.
+    /// </summary>
+    public Guid CustomerId { get; private set; }
+
     public string CustomerEmail { get; private set; } = string.Empty;
     public OrderStatus Status { get; private set; }
     public decimal Total { get; private set; }
@@ -28,13 +35,18 @@ public class Order
     public DateTime? CompletedAtUtc { get; private set; }
     public IReadOnlyList<OrderLine> Lines => _lines;
 
-    public static Order Place(string customerEmail, IEnumerable<OrderLine> lines)
+    public static Order Place(Guid customerId, string customerEmail, IEnumerable<OrderLine> lines)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(customerEmail);
+        if (customerId == Guid.Empty)
+        {
+            throw new ArgumentException("An order needs an owner.", nameof(customerId));
+        }
 
         var order = new Order
         {
             Id = Guid.NewGuid(),
+            CustomerId = customerId,
             CustomerEmail = customerEmail,
             Status = OrderStatus.Pending,
             CreatedAtUtc = DateTime.UtcNow,
